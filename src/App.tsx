@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Public pages
 import CustomerApp from "./pages/CustomerApp";
@@ -40,12 +41,13 @@ const queryClient = new QueryClient();
 
 function App() {
   return (
-    <BrowserRouter>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
             <Routes>
               {/* Rota raiz redireciona para /aplicativo */}
               <Route path="/" element={<Navigate to="/aplicativo" replace />} />
@@ -90,6 +92,7 @@ function App() {
         </AuthProvider>
       </QueryClientProvider>
     </BrowserRouter>
+  </ErrorBoundary>
   );
 }
 
