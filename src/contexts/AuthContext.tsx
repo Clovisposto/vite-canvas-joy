@@ -8,13 +8,13 @@ interface Profile {
   id: string;
   email: string | null;
   full_name: string | null;
-  role: UserRole;
 }
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
+  roles: UserRole[];
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
@@ -31,6 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [roles, setRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,10 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (session?.user) {
           setTimeout(() => {
-            fetchProfile(session.user.id);
+            fetchProfileAndRoles(session.user.id);
           }, 0);
         } else {
           setProfile(null);
+          setRoles([]);
         }
       }
     );
@@ -53,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfileAndRoles(session.user.id);
       }
       setLoading(false);
     });
@@ -61,15 +63,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
+  const fetchProfileAndRoles = async (userId: string) => {
+    // Fetch profile
+    const { data: profileData } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, email, full_name')
       .eq('id', userId)
       .single();
     
-    if (!error && data) {
-      setProfile(data as Profile);
+    if (profileData) {
+      setProfile(profileData as Profile);
+    }
+
+    // Fetch roles from user_roles table (secure approach)
+    const { data: rolesData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId);
+    
+    if (rolesData && rolesData.length > 0) {
+      setRoles(rolesData.map(r => r.role as UserRole));
+    } else {
+      // Default to viewer if no roles assigned
+      setRoles(['viewer']);
     }
   };
 
@@ -85,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       options: {
         emailRedirectTo: redirectUrl,
-        data: { full_name: fullName } // Role removed - assigned by database function
+        data: { full_name: fullName }
       }
     });
     return { error };
@@ -94,11 +110,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setRoles([]);
   };
 
-  // Role helper values
-  const isAdmin = profile?.role === 'admin';
-  const isStaff = profile?.role === 'admin' || profile?.role === 'operador';
+  // Role helper values - derived from user_roles table
+  const isAdmin = roles.includes('admin');
+  const isStaff = roles.includes('admin') || roles.includes('operador');
   
   const canAccessRoute = (requiredRole?: 'admin' | 'staff'): boolean => {
     if (!profile) return false;
@@ -110,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, session, profile, loading, 
+      user, session, profile, roles, loading, 
       signIn, signUp, signOut,
       isAdmin, isStaff, canAccessRoute 
     }}>

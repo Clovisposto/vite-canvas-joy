@@ -73,7 +73,7 @@ const menuItems: MenuItem[] = [
 ];
 
 export default function AdminLayout({ children, title }: AdminLayoutProps) {
-  const { user, profile, signOut, canAccessRoute } = useAuth();
+  const { user, profile, roles, signOut, canAccessRoute } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { toast } = useToast();
@@ -203,7 +203,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
                   {profile?.full_name || user?.email}
                 </p>
                 <p className="text-xs text-sidebar-foreground/60 capitalize">
-                  {profile?.role || 'viewer'}
+                  {roles?.[0] || 'viewer'}
                 </p>
               </div>
             </div>

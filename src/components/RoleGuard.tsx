@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, UserRole } from '@/contexts/AuthContext';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ interface RoleGuardProps {
  * - 'admin' = admin only
  */
 export default function RoleGuard({ children, requiredRole }: RoleGuardProps) {
-  const { user, profile, loading, canAccessRoute } = useAuth();
+  const { user, profile, roles, loading, canAccessRoute } = useAuth();
 
   if (loading) {
     return (
@@ -44,8 +44,10 @@ export default function RoleGuard({ children, requiredRole }: RoleGuardProps) {
   // Check role permissions
   if (!canAccessRoute(requiredRole)) {
     const requiredRoleLabel = requiredRole === 'admin' ? 'Administrador' : 'Administrador ou Operador';
-    const currentRoleLabel = profile.role === 'admin' ? 'Administrador' : 
-                             profile.role === 'operador' ? 'Operador' : 'Visualizador';
+    const primaryRole: UserRole = roles.includes('admin') ? 'admin' : 
+                                  roles.includes('operador') ? 'operador' : 'viewer';
+    const currentRoleLabel = primaryRole === 'admin' ? 'Administrador' : 
+                             primaryRole === 'operador' ? 'Operador' : 'Visualizador';
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
