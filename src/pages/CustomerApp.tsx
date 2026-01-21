@@ -29,11 +29,14 @@ export interface CustomerData {
 }
 
 export default function CustomerApp() {
+  console.log('CustomerApp: componente montando');
+  
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [step, setStep] = useState(1); // 1 = Captura, 2 = Confirmação, 3 = Agradecimento
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<Record<string, any>>({});
+  const [initError, setInitError] = useState<string | null>(null);
   
   const [customerData, setCustomerData] = useState<CustomerData>({
     phone: '',
@@ -45,21 +48,37 @@ export default function CustomerApp() {
   });
 
   useEffect(() => {
+    console.log('CustomerApp: useEffect iniciando fetchSettings');
     fetchSettings();
   }, []);
 
   const fetchSettings = async () => {
-    const { data } = await supabase.from('settings').select('*');
-    if (data) {
-      const settingsMap: Record<string, any> = {};
-      data.forEach((s: any) => {
-        try {
-          settingsMap[s.key] = typeof s.value === 'string' ? JSON.parse(s.value) : s.value;
-        } catch {
-          settingsMap[s.key] = s.value;
-        }
-      });
-      setSettings(settingsMap);
+    console.log('CustomerApp: fetchSettings iniciando');
+    try {
+      const { data, error } = await supabase.from('settings').select('*');
+      console.log('CustomerApp: fetchSettings resultado', { data, error });
+      
+      if (error) {
+        console.error('CustomerApp: Erro ao buscar settings', error);
+        setInitError(`Erro Supabase: ${error.message}`);
+        return;
+      }
+      
+      if (data) {
+        const settingsMap: Record<string, any> = {};
+        data.forEach((s: any) => {
+          try {
+            settingsMap[s.key] = typeof s.value === 'string' ? JSON.parse(s.value) : s.value;
+          } catch {
+            settingsMap[s.key] = s.value;
+          }
+        });
+        console.log('CustomerApp: settings carregadas', settingsMap);
+        setSettings(settingsMap);
+      }
+    } catch (err) {
+      console.error('CustomerApp: Exceção em fetchSettings', err);
+      setInitError(`Exceção: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -223,6 +242,26 @@ console.log('PWA cadastro sucesso', { phoneE164, attendantCode: finalAttendantCo
     setCustomerData(prev => ({ ...prev, phone: '' }));
     setStep(1);
   }, []);
+
+  console.log('CustomerApp: renderizando, step =', step, 'initError =', initError);
+
+  // Mostrar erro de inicialização se houver
+  if (initError) {
+    return (
+      <div className="min-h-screen bg-red-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-lg shadow-lg p-6 max-w-lg w-full text-center">
+          <h1 className="text-xl font-bold text-red-600 mb-4">Erro de Conexão</h1>
+          <p className="text-gray-600 mb-4">{initError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-primary text-white py-2 px-6 rounded hover:bg-primary/90"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen-ios bg-background overflow-x-hidden overflow-y-auto">

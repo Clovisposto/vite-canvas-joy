@@ -38,6 +38,7 @@ export default function StepUnified({
   onSubmit, 
   loading 
 }: StepUnifiedProps) {
+  console.log('StepUnified: renderizando com props', { postoName, phone, loading });
   const [error, setError] = useState('');
 
   const formatPhone = (value: string) => {
