@@ -72,7 +72,7 @@ export default function AdminCaptura() {
     try {
       let query = supabase
         .from('checkins')
-        .select('*, stone_tef_logs!checkins_stone_tef_id_fkey(frentista_id, frentista_nome, terminal_id, bandeira)')
+        .select('*')
         .order('created_at', { ascending: false });
 
       const dateFilter = getDateFilter();
@@ -144,10 +144,10 @@ export default function AdminCaptura() {
           ...checkin,
           customers: customersMap[checkin.phone] || null,
           capture_point: capturePoint,
-          // Preencher frentista/terminal do ponto de captura se não vier do stone_tef_logs
-          derived_terminal_id: checkin.stone_tef_logs?.terminal_id || capturePoint?.terminal_id || null,
-          derived_frentista_nome: checkin.stone_tef_logs?.frentista_nome || (capturePoint?.frentistas as any)?.nome || null,
-          derived_frentista_codigo: checkin.stone_tef_logs?.frentista_id || (capturePoint?.frentistas as any)?.codigo || checkin.attendant_code || null,
+          // Preencher frentista/terminal do ponto de captura
+          derived_terminal_id: capturePoint?.terminal_id || null,
+          derived_frentista_nome: (capturePoint?.frentistas as any)?.nome || null,
+          derived_frentista_codigo: (capturePoint?.frentistas as any)?.codigo || checkin.attendant_code || null,
           capture_point_name: capturePoint?.name || null,
         };
       });
