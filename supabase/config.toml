@@ -1,1 +1,40 @@
 project_id = "womgorjjweikolfhrhgp"
+
+[functions.ai-generate-variations]
+verify_jwt = false
+
+[functions.log-cleanup]
+verify_jwt = false
+
+[functions.raffle-confirmation]
+verify_jwt = false
+
+[functions.rating-response]
+verify_jwt = false
+
+[functions.send-whatsapp]
+verify_jwt = false
+
+[functions.stone-webhook]
+verify_jwt = false
+
+[functions.wa-ai-chatbot]
+verify_jwt = false
+
+[functions.wa-campaign-run]
+verify_jwt = false
+
+[functions.wa-instance-manage]
+verify_jwt = false
+
+[functions.wa-send]
+verify_jwt = false
+
+[functions.wa-webhook]
+verify_jwt = false
+
+[functions.whatsapp-send]
+verify_jwt = false
+
+[functions.whatsapp-test]
+verify_jwt = false
