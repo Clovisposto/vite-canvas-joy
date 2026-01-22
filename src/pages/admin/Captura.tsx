@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
-import { Download, Upload, Search, RefreshCw, Filter, AlertTriangle, MessageCircle, Send, X, Loader2, Rocket, Phone } from 'lucide-react';
+import { Download, Upload, Search, RefreshCw, Filter, AlertTriangle, MessageCircle, Send, X, Loader2, Rocket, Phone, Users, Activity } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -24,12 +25,25 @@ type PeriodFilter = 'today' | 'week' | 'month' | 'all';
 
 export default function AdminCaptura() {
   const { toast } = useToast();
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'checkins' | 'customers'>('checkins');
+  
+  // Check-ins state
   const [checkins, setCheckins] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('today');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [frentaFilter, setFrentaFilter] = useState('all');
+  
+  // Customers state (nova aba)
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customersSearch, setCustomersSearch] = useState('');
+  const [customersPeriodFilter, setCustomersPeriodFilter] = useState<PeriodFilter>('all');
+  
+  // Selection state
   const [selectedPhones, setSelectedPhones] = useState<Set<string>>(new Set());
   const [bulkMessage, setBulkMessage] = useState('Olá! Aqui é do Posto. Temos uma novidade especial para você!');
   const [showBulkDialog, setShowBulkDialog] = useState(false);
@@ -44,8 +58,9 @@ export default function AdminCaptura() {
   const [showBulkPhoneDialog, setShowBulkPhoneDialog] = useState(false);
 
   useEffect(() => { fetchCheckins(); }, [periodFilter, paymentFilter, frentaFilter]);
+  useEffect(() => { fetchCustomers(); }, [customersPeriodFilter]);
 
-  const getDateFilter = () => {
+  const getDateFilter = (period: PeriodFilter) => {
     // Calcula a data usando fuso horário de Brasília (UTC-3)
     const now = new Date();
     const brasiliaOffset = -3 * 60; // UTC-3 em minutos
@@ -55,7 +70,7 @@ export default function AdminCaptura() {
     // Ajusta para horário de Brasília
     const brasiliaTime = new Date(now.getTime() + diffMinutes * 60 * 1000);
     
-    switch (periodFilter) {
+    switch (period) {
       case 'today':
         // Meia-noite em Brasília
         brasiliaTime.setHours(0, 0, 0, 0);
@@ -81,7 +96,7 @@ export default function AdminCaptura() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      const dateFilter = getDateFilter();
+      const dateFilter = getDateFilter(periodFilter);
       if (dateFilter) {
         query = query.gte('created_at', dateFilter);
       }
@@ -172,6 +187,46 @@ export default function AdminCaptura() {
     }
   };
 
+  const fetchCustomers = async () => {
+    setCustomersLoading(true);
+    try {
+      let query = supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const dateFilter = getDateFilter(customersPeriodFilter);
+      if (dateFilter) {
+        query = query.gte('created_at', dateFilter);
+      }
+
+      const { data, error } = await query.limit(1000);
+      
+      if (error) {
+        console.error('Erro ao buscar clientes:', error);
+        toast({
+          title: 'Erro ao carregar clientes',
+          description: error.message,
+          variant: 'destructive',
+        });
+        setCustomers([]);
+        return;
+      }
+
+      setCustomers(data || []);
+    } catch (err: any) {
+      console.error('Erro inesperado:', err);
+      toast({
+        title: 'Erro ao carregar clientes',
+        description: err?.message || 'Erro inesperado',
+        variant: 'destructive',
+      });
+      setCustomers([]);
+    } finally {
+      setCustomersLoading(false);
+    }
+  };
+
   // Group check-ins by phone number
   const groupedByPhone = checkins.reduce((acc, c) => {
     const phone = c.phone;
@@ -218,11 +273,16 @@ export default function AdminCaptura() {
     !search || c.phone?.includes(search) || c.customers?.name?.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Filtrar clientes
+  const filteredCustomers = customers.filter((c: any) => 
+    !customersSearch || c.phone?.includes(customersSearch) || c.name?.toLowerCase().includes(customersSearch.toLowerCase())
+  );
+
   // Check if showing demo data
   const hasRealData = filtered.some((c: any) => !c.is_demo);
   const isDemo = !hasRealData && filtered.some((c: any) => c.is_demo);
 
-  // Calculate totals
+  // Calculate totals for check-ins
   const totals = {
     uniqueCustomers: filtered.length,
     totalVisits: filtered.reduce((sum: number, c: any) => sum + c.visits, 0),
@@ -269,11 +329,19 @@ export default function AdminCaptura() {
     setSelectedPhones(newSelected);
   };
 
+  const getCurrentList = () => {
+    if (activeTab === 'customers') {
+      return filteredCustomers.slice(0, 100);
+    }
+    return filtered.slice(0, 100);
+  };
+
   const toggleSelectAll = () => {
-    if (selectedPhones.size === filtered.slice(0, 100).length) {
+    const currentList = getCurrentList();
+    if (selectedPhones.size === currentList.length) {
       setSelectedPhones(new Set());
     } else {
-      setSelectedPhones(new Set(filtered.slice(0, 100).map((c: any) => c.phone)));
+      setSelectedPhones(new Set(currentList.map((c: any) => c.phone)));
     }
   };
 
@@ -298,9 +366,10 @@ export default function AdminCaptura() {
   };
 
   const handleCreateBulkJob = async (data: { title: string; message: string; mode: 'seguro' | 'moderado' | 'rapido' }) => {
+    const currentList = activeTab === 'customers' ? filteredCustomers : filtered;
     const contacts = Array.from(selectedPhones).map((phone) => {
-      const customer = filtered.find((c: any) => c.phone === phone) as any;
-      return { phone, name: customer?.customers?.name };
+      const customer = currentList.find((c: any) => c.phone === phone) as any;
+      return { phone, name: activeTab === 'customers' ? customer?.name : customer?.customers?.name };
     });
 
     const job = await createJob({
@@ -321,9 +390,10 @@ export default function AdminCaptura() {
     setIsSending(true);
 
     try {
+      const currentList = activeTab === 'customers' ? filteredCustomers : filtered;
       const customersToSend = Array.from(selectedPhones).map((phone) => {
-        const customer = filtered.find((c: any) => c.phone === phone) as any;
-        return { phone, name: customer?.customers?.name };
+        const customer = currentList.find((c: any) => c.phone === phone) as any;
+        return { phone, name: activeTab === 'customers' ? customer?.name : customer?.customers?.name };
       });
 
       const { data: result, error } = await supabase.functions.invoke('wa-send', {
@@ -388,14 +458,42 @@ export default function AdminCaptura() {
     a.click();
   };
 
+  const exportCustomersCSV = () => {
+    const headers = ['Telefone', 'Nome', 'Sorteio', 'Marketing Opt-in', 'Marketing Opt-in Em', 'LGPD', 'LGPD Em', 'Cadastrado Em'];
+    const rows = filteredCustomers.map((c: any) => [
+      c.phone,
+      c.name || '',
+      c.accepts_raffle ? 'Sim' : 'Não',
+      c.accepts_promo ? 'Sim' : 'Não',
+      c.marketing_opt_in_at ? format(new Date(c.marketing_opt_in_at), 'dd/MM/yyyy HH:mm') : '',
+      c.lgpd_consent ? 'Sim' : 'Não',
+      c.lgpd_consent_timestamp ? format(new Date(c.lgpd_consent_timestamp), 'dd/MM/yyyy HH:mm') : '',
+      format(new Date(c.created_at), 'dd/MM/yyyy HH:mm'),
+    ]);
+    const csv = [headers, ...rows].map(r => r.join(';')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `clientes_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+  };
+
   const displayedCustomers = filtered.slice(0, 100);
-  const allSelected = displayedCustomers.length > 0 && selectedPhones.size === displayedCustomers.length;
+  const displayedCustomersList = filteredCustomers.slice(0, 100);
+  const allSelected = getCurrentList().length > 0 && selectedPhones.size === getCurrentList().length;
+
+  // Clear selection when switching tabs
+  const handleTabChange = (value: string) => {
+    setActiveTab(value as 'checkins' | 'customers');
+    setSelectedPhones(new Set());
+  };
 
   return (
     <AdminLayout title="Captura de Cliente">
       <div className="space-y-6">
         {/* Demo Badge */}
-        {isDemo && (
+        {isDemo && activeTab === 'checkins' && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
             <AlertTriangle className="h-5 w-5 text-yellow-600" />
             <span className="text-yellow-700 dark:text-yellow-400 font-medium">
@@ -436,239 +534,431 @@ export default function AdminCaptura() {
           </div>
         )}
 
-        {/* Filters */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              Filtros
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-              <div className="relative lg:col-span-2">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar telefone/nome..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              <Select value={periodFilter} onValueChange={(v) => setPeriodFilter(v as PeriodFilter)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Período" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="today">Hoje</SelectItem>
-                  <SelectItem value="week">Última Semana</SelectItem>
-                  <SelectItem value="month">Último Mês</SelectItem>
-                  <SelectItem value="all">Todos</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={paymentFilter} onValueChange={setPaymentFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pagamento" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  <SelectItem value="debito">Débito</SelectItem>
-                  <SelectItem value="credito">Crédito</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={frentaFilter} onValueChange={setFrentaFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Frentista" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {frentistas.map(f => (
-                    <SelectItem key={f} value={f!}>{f}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="checkins" className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Check-ins ({filtered.length})
+            </TabsTrigger>
+            <TabsTrigger value="customers" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Clientes ({customers.length})
+            </TabsTrigger>
+          </TabsList>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Clientes ({filtered.length})</CardTitle>
-            <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={fetchCheckins}>
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" onClick={() => setShowImportDialog(true)}>
-                <Upload className="h-4 w-4 mr-2" /> CSV
-              </Button>
-              <Button variant="outline" onClick={() => setShowBulkPhoneDialog(true)}>
-                <Phone className="h-4 w-4 mr-2" /> Telefones
-              </Button>
-              <Button variant="outline" onClick={exportCSV}>
-                <Download className="h-4 w-4 mr-2" /> Exportar
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <Checkbox 
-                        checked={allSelected} 
-                        onCheckedChange={toggleSelectAll}
-                        aria-label="Selecionar todos"
-                      />
-                    </TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Frentista</TableHead>
-                    <TableHead>Terminal</TableHead>
-                    <TableHead className="text-center">Visitas</TableHead>
-                    <TableHead>Última Visita</TableHead>
-                    <TableHead className="text-center">Sorteio</TableHead>
-                    <TableHead className="text-center">Marketing</TableHead>
-                    <TableHead className="text-center">LGPD</TableHead>
-                    <TableHead className="text-right">Total R$</TableHead>
-                    <TableHead className="text-right">Total Litros</TableHead>
-                    <TableHead className="text-center">Ação</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
-                        Carregando...
-                      </TableCell>
-                    </TableRow>
-                  ) : filtered.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
-                        Nenhum registro encontrado
-                      </TableCell>
-                    </TableRow>
-                  ) : displayedCustomers.map((c: any) => (
-                    <TableRow key={c.phone} className={`${c.is_demo ? 'bg-yellow-500/5' : ''} ${selectedPhones.has(c.phone) ? 'bg-primary/5' : ''}`}>
-                      <TableCell>
-                        <Checkbox 
-                          checked={selectedPhones.has(c.phone)} 
-                          onCheckedChange={() => toggleSelect(c.phone)}
-                          aria-label={`Selecionar ${c.phone}`}
-                        />
-                      </TableCell>
-                      <TableCell className="font-mono">{c.phone}</TableCell>
-                      <TableCell>{c.customers?.name || '-'}</TableCell>
-                      <TableCell>
-                        {c.frentista_nome || c.frentista_codigo ? (
-                          <div className="flex flex-col">
-                            <span className="font-medium text-sm">{c.frentista_nome || c.frentista_codigo}</span>
-                            {c.frentista_nome && c.frentista_codigo && (
-                              <span className="text-xs text-muted-foreground">Cód: {c.frentista_codigo}</span>
-                            )}
-                          </div>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {c.terminal_id || c.capture_point_name ? (
-                          <div className="flex flex-col">
-                            {c.capture_point_name && (
-                              <span className="font-medium text-sm">{c.capture_point_name}</span>
-                            )}
-                            {c.terminal_id && (
-                              <span className="font-mono text-xs text-muted-foreground">{c.terminal_id}</span>
-                            )}
-                            {c.bandeira && (
-                              <Badge variant="outline" className="text-xs w-fit mt-0.5">{c.bandeira}</Badge>
-                            )}
-                          </div>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className="font-bold">{c.visits}</Badge>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">{format(new Date(c.lastVisit), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={c.customers?.accepts_raffle ? 'default' : 'secondary'} className="text-xs">
-                          {c.customers?.accepts_raffle ? 'S' : 'N'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Badge variant={c.customers?.accepts_promo ? 'default' : 'secondary'} className="text-xs">
-                            {c.customers?.accepts_promo ? 'Sim' : 'Não'}
-                          </Badge>
-                          {c.customers?.marketing_opt_in_at && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {format(new Date(c.customers.marketing_opt_in_at), 'dd/MM/yy HH:mm')}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Badge variant={c.customers?.lgpd_consent ? 'default' : 'destructive'} className="text-xs">
-                            {c.customers?.lgpd_consent ? 'Sim' : 'Não'}
-                          </Badge>
-                          {c.customers?.lgpd_consent_timestamp && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {format(new Date(c.customers.lgpd_consent_timestamp), 'dd/MM/yy HH:mm')}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {c.totalAmount ? c.totalAmount.toFixed(2) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {c.totalLiters || '-'}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-                          onClick={() => sendSingleMessage(c.phone, c.customers?.name)}
-                          title="Enviar via API"
-                        >
-                          <MessageCircle className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+          {/* Check-ins Tab */}
+          <TabsContent value="checkins" className="space-y-6 mt-6">
+            {/* Filters */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filtros
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                  <div className="relative lg:col-span-2">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar telefone/nome..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Select value={periodFilter} onValueChange={(v) => setPeriodFilter(v as PeriodFilter)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Período" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="today">Hoje</SelectItem>
+                      <SelectItem value="week">Última Semana</SelectItem>
+                      <SelectItem value="month">Último Mês</SelectItem>
+                      <SelectItem value="all">Todos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pagamento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="pix">PIX</SelectItem>
+                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                      <SelectItem value="debito">Débito</SelectItem>
+                      <SelectItem value="credito">Crédito</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={frentaFilter} onValueChange={setFrentaFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Frentista" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {frentistas.map(f => (
+                        <SelectItem key={f} value={f!}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Totals Footer */}
-        <Card className="bg-muted/30">
-          <CardContent className="py-4">
-            <div className="flex flex-wrap gap-6 justify-center sm:justify-start">
-              <div className="text-center sm:text-left">
-                <p className="text-sm text-muted-foreground">Clientes Únicos</p>
-                <p className="text-2xl font-bold text-foreground">{totals.uniqueCustomers}</p>
-              </div>
-              <div className="text-center sm:text-left">
-                <p className="text-sm text-muted-foreground">Total Visitas</p>
-                <p className="text-2xl font-bold text-foreground">{Number(totals.totalVisits)}</p>
-              </div>
-              <div className="text-center sm:text-left">
-                <p className="text-sm text-muted-foreground">Total R$</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {Number(totals.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </p>
-              </div>
-              <div className="text-center sm:text-left">
-                <p className="text-sm text-muted-foreground">Total Litros</p>
-                <p className="text-2xl font-bold text-foreground">{Number(totals.liters).toFixed(1)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Clientes ({filtered.length})</CardTitle>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="icon" onClick={fetchCheckins}>
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+                    <Upload className="h-4 w-4 mr-2" /> CSV
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowBulkPhoneDialog(true)}>
+                    <Phone className="h-4 w-4 mr-2" /> Telefones
+                  </Button>
+                  <Button variant="outline" onClick={exportCSV}>
+                    <Download className="h-4 w-4 mr-2" /> Exportar
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
+                          <Checkbox 
+                            checked={allSelected} 
+                            onCheckedChange={toggleSelectAll}
+                            aria-label="Selecionar todos"
+                          />
+                        </TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Frentista</TableHead>
+                        <TableHead>Terminal</TableHead>
+                        <TableHead className="text-center">Visitas</TableHead>
+                        <TableHead>Última Visita</TableHead>
+                        <TableHead className="text-center">Sorteio</TableHead>
+                        <TableHead className="text-center">Marketing</TableHead>
+                        <TableHead className="text-center">LGPD</TableHead>
+                        <TableHead className="text-right">Total R$</TableHead>
+                        <TableHead className="text-right">Total Litros</TableHead>
+                        <TableHead className="text-center">Ação</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                    {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
+                            Carregando...
+                          </TableCell>
+                        </TableRow>
+                      ) : filtered.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={13} className="text-center py-8 text-muted-foreground">
+                            Nenhum registro encontrado
+                          </TableCell>
+                        </TableRow>
+                      ) : displayedCustomers.map((c: any) => (
+                        <TableRow key={c.phone} className={`${c.is_demo ? 'bg-yellow-500/5' : ''} ${selectedPhones.has(c.phone) ? 'bg-primary/5' : ''}`}>
+                          <TableCell>
+                            <Checkbox 
+                              checked={selectedPhones.has(c.phone)} 
+                              onCheckedChange={() => toggleSelect(c.phone)}
+                              aria-label={`Selecionar ${c.phone}`}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono">{c.phone}</TableCell>
+                          <TableCell>{c.customers?.name || '-'}</TableCell>
+                          <TableCell>
+                            {c.frentista_nome || c.frentista_codigo ? (
+                              <div className="flex flex-col">
+                                <span className="font-medium text-sm">{c.frentista_nome || c.frentista_codigo}</span>
+                                {c.frentista_nome && c.frentista_codigo && (
+                                  <span className="text-xs text-muted-foreground">Cód: {c.frentista_codigo}</span>
+                                )}
+                              </div>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {c.terminal_id || c.capture_point_name ? (
+                              <div className="flex flex-col">
+                                {c.capture_point_name && (
+                                  <span className="font-medium text-sm">{c.capture_point_name}</span>
+                                )}
+                                {c.terminal_id && (
+                                  <span className="font-mono text-xs text-muted-foreground">{c.terminal_id}</span>
+                                )}
+                                {c.bandeira && (
+                                  <Badge variant="outline" className="text-xs w-fit mt-0.5">{c.bandeira}</Badge>
+                                )}
+                              </div>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className="font-bold">{c.visits}</Badge>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">{format(new Date(c.lastVisit), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant={c.customers?.accepts_raffle ? 'default' : 'secondary'} className="text-xs">
+                              {c.customers?.accepts_raffle ? 'S' : 'N'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <Badge variant={c.customers?.accepts_promo ? 'default' : 'secondary'} className="text-xs">
+                                {c.customers?.accepts_promo ? 'Sim' : 'Não'}
+                              </Badge>
+                              {c.customers?.marketing_opt_in_at && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {format(new Date(c.customers.marketing_opt_in_at), 'dd/MM/yy HH:mm')}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <Badge variant={c.customers?.lgpd_consent ? 'default' : 'destructive'} className="text-xs">
+                                {c.customers?.lgpd_consent ? 'Sim' : 'Não'}
+                              </Badge>
+                              {c.customers?.lgpd_consent_timestamp && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {format(new Date(c.customers.lgpd_consent_timestamp), 'dd/MM/yy HH:mm')}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {c.totalAmount ? c.totalAmount.toFixed(2) : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {c.totalLiters || '-'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                              onClick={() => sendSingleMessage(c.phone, c.customers?.name)}
+                              title="Enviar via API"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Totals Footer */}
+            <Card className="bg-muted/30">
+              <CardContent className="py-4">
+                <div className="flex flex-wrap gap-6 justify-center sm:justify-start">
+                  <div className="text-center sm:text-left">
+                    <p className="text-sm text-muted-foreground">Clientes Únicos</p>
+                    <p className="text-2xl font-bold text-foreground">{totals.uniqueCustomers}</p>
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <p className="text-sm text-muted-foreground">Total Visitas</p>
+                    <p className="text-2xl font-bold text-foreground">{Number(totals.totalVisits)}</p>
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <p className="text-sm text-muted-foreground">Total R$</p>
+                    <p className="text-2xl font-bold text-foreground">
+                      {Number(totals.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <p className="text-sm text-muted-foreground">Total Litros</p>
+                    <p className="text-2xl font-bold text-foreground">{Number(totals.liters).toFixed(1)}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Customers Tab */}
+          <TabsContent value="customers" className="space-y-6 mt-6">
+            {/* Filters */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filtros
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="relative lg:col-span-2">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar telefone/nome..."
+                      value={customersSearch}
+                      onChange={(e) => setCustomersSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Select value={customersPeriodFilter} onValueChange={(v) => setCustomersPeriodFilter(v as PeriodFilter)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Período de cadastro" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="today">Hoje</SelectItem>
+                      <SelectItem value="week">Última Semana</SelectItem>
+                      <SelectItem value="month">Último Mês</SelectItem>
+                      <SelectItem value="all">Todos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Todos os Clientes ({filteredCustomers.length})</CardTitle>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="icon" onClick={fetchCustomers}>
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+                    <Upload className="h-4 w-4 mr-2" /> CSV
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowBulkPhoneDialog(true)}>
+                    <Phone className="h-4 w-4 mr-2" /> Telefones
+                  </Button>
+                  <Button variant="outline" onClick={exportCustomersCSV}>
+                    <Download className="h-4 w-4 mr-2" /> Exportar
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
+                          <Checkbox 
+                            checked={allSelected} 
+                            onCheckedChange={toggleSelectAll}
+                            aria-label="Selecionar todos"
+                          />
+                        </TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Cadastrado em</TableHead>
+                        <TableHead className="text-center">Sorteio</TableHead>
+                        <TableHead className="text-center">Marketing</TableHead>
+                        <TableHead className="text-center">LGPD</TableHead>
+                        <TableHead className="text-center">Ação</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                    {customersLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                            Carregando...
+                          </TableCell>
+                        </TableRow>
+                      ) : filteredCustomers.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                            Nenhum cliente encontrado
+                          </TableCell>
+                        </TableRow>
+                      ) : displayedCustomersList.map((c: any) => (
+                        <TableRow key={c.id} className={selectedPhones.has(c.phone) ? 'bg-primary/5' : ''}>
+                          <TableCell>
+                            <Checkbox 
+                              checked={selectedPhones.has(c.phone)} 
+                              onCheckedChange={() => toggleSelect(c.phone)}
+                              aria-label={`Selecionar ${c.phone}`}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono">{c.phone}</TableCell>
+                          <TableCell>{c.name || '-'}</TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {format(new Date(c.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant={c.accepts_raffle ? 'default' : 'secondary'} className="text-xs">
+                              {c.accepts_raffle ? 'S' : 'N'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <Badge variant={c.accepts_promo ? 'default' : 'secondary'} className="text-xs">
+                                {c.accepts_promo ? 'Sim' : 'Não'}
+                              </Badge>
+                              {c.marketing_opt_in_at && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {format(new Date(c.marketing_opt_in_at), 'dd/MM/yy HH:mm')}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <Badge variant={c.lgpd_consent ? 'default' : 'destructive'} className="text-xs">
+                                {c.lgpd_consent ? 'Sim' : 'Não'}
+                              </Badge>
+                              {c.lgpd_consent_timestamp && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {format(new Date(c.lgpd_consent_timestamp), 'dd/MM/yy HH:mm')}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                              onClick={() => sendSingleMessage(c.phone, c.name)}
+                              title="Enviar via API"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Totals Footer */}
+            <Card className="bg-muted/30">
+              <CardContent className="py-4">
+                <div className="flex flex-wrap gap-6 justify-center sm:justify-start">
+                  <div className="text-center sm:text-left">
+                    <p className="text-sm text-muted-foreground">Total Clientes</p>
+                    <p className="text-2xl font-bold text-foreground">{filteredCustomers.length}</p>
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <p className="text-sm text-muted-foreground">Opt-in Marketing</p>
+                    <p className="text-2xl font-bold text-foreground">
+                      {filteredCustomers.filter((c: any) => c.accepts_promo).length}
+                    </p>
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <p className="text-sm text-muted-foreground">LGPD Aceito</p>
+                    <p className="text-2xl font-bold text-foreground">
+                      {filteredCustomers.filter((c: any) => c.lgpd_consent).length}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Bulk Send Dialog */}
         <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
@@ -714,8 +1004,9 @@ export default function AdminCaptura() {
           open={showBulkJobDialog}
           onOpenChange={setShowBulkJobDialog}
           contacts={Array.from(selectedPhones).map(phone => {
-            const customer = filtered.find((c: any) => c.phone === phone) as any;
-            return { phone, name: customer?.customers?.name };
+            const currentList = activeTab === 'customers' ? filteredCustomers : filtered;
+            const customer = currentList.find((c: any) => c.phone === phone) as any;
+            return { phone, name: activeTab === 'customers' ? customer?.name : customer?.customers?.name };
           })}
           onSubmit={handleCreateBulkJob}
         />
@@ -724,14 +1015,14 @@ export default function AdminCaptura() {
         <CSVImportDialog
           open={showImportDialog}
           onOpenChange={setShowImportDialog}
-          onImportComplete={fetchCheckins}
+          onImportComplete={() => { fetchCheckins(); fetchCustomers(); }}
         />
 
         {/* Bulk Phone Insert Dialog */}
         <BulkPhoneInsertDialog
           open={showBulkPhoneDialog}
           onOpenChange={setShowBulkPhoneDialog}
-          onImportComplete={fetchCheckins}
+          onImportComplete={() => { fetchCheckins(); fetchCustomers(); }}
         />
       </div>
     </AdminLayout>
