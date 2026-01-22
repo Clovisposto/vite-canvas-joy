@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   Fuel, Gift, Trophy, ArrowRight, 
-  Phone, Loader2, Sparkles, MessageCircle
+  Phone, Loader2, Sparkles, MessageCircle, User
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoGP from "@/assets/logo-gp.png";
@@ -13,7 +13,9 @@ import logoGP from "@/assets/logo-gp.png";
 interface StepUnifiedProps {
   postoName: string;
   phone: string;
+  name: string;
   onPhoneChange: (value: string) => void;
+  onNameChange: (value: string) => void;
   onSubmit: () => void;
   loading: boolean;
 }
@@ -33,12 +35,14 @@ const item = {
 
 export default function StepUnified({ 
   postoName, 
-  phone, 
-  onPhoneChange, 
+  phone,
+  name,
+  onPhoneChange,
+  onNameChange,
   onSubmit, 
   loading 
 }: StepUnifiedProps) {
-  console.log('StepUnified: renderizando com props', { postoName, phone, loading });
+  console.log('StepUnified: renderizando com props', { postoName, phone, name, loading });
   const [error, setError] = useState('');
 
   const formatPhone = (value: string) => {
@@ -217,6 +221,22 @@ export default function StepUnified({
 
               {/* Divisor */}
               <div className="border-t border-border/60 mb-6" />
+
+              {/* Campo de nome */}
+              <div className="mb-4">
+                <Label htmlFor="name" className="text-sm font-medium text-foreground flex items-center gap-2 mb-2">
+                  <User className="w-4 h-4 text-primary" />
+                  Seu nome
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Digite seu nome"
+                  value={name}
+                  onChange={(e) => onNameChange(e.target.value)}
+                  className="h-12 text-base border-2 border-border focus:border-primary transition-colors"
+                />
+              </div>
 
               {/* Campo de telefone */}
               <div className="mb-5">
