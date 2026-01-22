@@ -10,13 +10,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { Download, Search, RefreshCw, Filter, AlertTriangle, MessageCircle, Send, X, Loader2, Rocket } from 'lucide-react';
+import { Download, Upload, Search, RefreshCw, Filter, AlertTriangle, MessageCircle, Send, X, Loader2, Rocket } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { useBulkJobs } from '@/hooks/useBulkJobs';
 import BulkJobCreateDialog from '@/components/admin/BulkJobCreateDialog';
 import BulkJobProgress from '@/components/admin/BulkJobProgress';
+import CSVImportDialog from '@/components/admin/CSVImportDialog';
 
 type PeriodFilter = 'today' | 'week' | 'month' | 'all';
 
@@ -36,6 +37,9 @@ export default function AdminCaptura() {
   // Bulk Jobs (sistema de fila controlada)
   const [showBulkJobDialog, setShowBulkJobDialog] = useState(false);
   const { jobs, activeJob, createJob, updateJobStatus, updateJobCounters, setActiveJob } = useBulkJobs();
+  
+  // CSV Import
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   useEffect(() => { fetchCheckins(); }, [periodFilter, paymentFilter, frentaFilter]);
 
@@ -494,8 +498,11 @@ export default function AdminCaptura() {
               <Button variant="outline" size="icon" onClick={fetchCheckins}>
                 <RefreshCw className="h-4 w-4" />
               </Button>
+              <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+                <Upload className="h-4 w-4 mr-2" /> Importar
+              </Button>
               <Button variant="outline" onClick={exportCSV}>
-                <Download className="h-4 w-4 mr-2" /> CSV
+                <Download className="h-4 w-4 mr-2" /> Exportar
               </Button>
             </div>
           </CardHeader>
@@ -706,6 +713,13 @@ export default function AdminCaptura() {
             return { phone, name: customer?.customers?.name };
           })}
           onSubmit={handleCreateBulkJob}
+        />
+
+        {/* CSV Import Dialog */}
+        <CSVImportDialog
+          open={showImportDialog}
+          onOpenChange={setShowImportDialog}
+          onImportComplete={fetchCheckins}
         />
       </div>
     </AdminLayout>
