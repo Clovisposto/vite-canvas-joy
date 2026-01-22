@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { Download, Upload, Search, RefreshCw, Filter, AlertTriangle, MessageCircle, Send, X, Loader2, Rocket } from 'lucide-react';
+import { Download, Upload, Search, RefreshCw, Filter, AlertTriangle, MessageCircle, Send, X, Loader2, Rocket, Phone } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +18,7 @@ import { useBulkJobs } from '@/hooks/useBulkJobs';
 import BulkJobCreateDialog from '@/components/admin/BulkJobCreateDialog';
 import BulkJobProgress from '@/components/admin/BulkJobProgress';
 import CSVImportDialog from '@/components/admin/CSVImportDialog';
+import BulkPhoneInsertDialog from '@/components/admin/BulkPhoneInsertDialog';
 
 type PeriodFilter = 'today' | 'week' | 'month' | 'all';
 
@@ -38,8 +39,9 @@ export default function AdminCaptura() {
   const [showBulkJobDialog, setShowBulkJobDialog] = useState(false);
   const { jobs, activeJob, createJob, updateJobStatus, updateJobCounters, setActiveJob } = useBulkJobs();
   
-  // CSV Import
+  // CSV Import & Manual Phone Insert
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showBulkPhoneDialog, setShowBulkPhoneDialog] = useState(false);
 
   useEffect(() => { fetchCheckins(); }, [periodFilter, paymentFilter, frentaFilter]);
 
@@ -499,7 +501,10 @@ export default function AdminCaptura() {
                 <RefreshCw className="h-4 w-4" />
               </Button>
               <Button variant="outline" onClick={() => setShowImportDialog(true)}>
-                <Upload className="h-4 w-4 mr-2" /> Importar
+                <Upload className="h-4 w-4 mr-2" /> CSV
+              </Button>
+              <Button variant="outline" onClick={() => setShowBulkPhoneDialog(true)}>
+                <Phone className="h-4 w-4 mr-2" /> Telefones
               </Button>
               <Button variant="outline" onClick={exportCSV}>
                 <Download className="h-4 w-4 mr-2" /> Exportar
@@ -719,6 +724,13 @@ export default function AdminCaptura() {
         <CSVImportDialog
           open={showImportDialog}
           onOpenChange={setShowImportDialog}
+          onImportComplete={fetchCheckins}
+        />
+
+        {/* Bulk Phone Insert Dialog */}
+        <BulkPhoneInsertDialog
+          open={showBulkPhoneDialog}
+          onOpenChange={setShowBulkPhoneDialog}
           onImportComplete={fetchCheckins}
         />
       </div>
