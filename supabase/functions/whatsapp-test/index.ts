@@ -97,50 +97,24 @@ function sanitizeApiKey(raw: string | undefined | null): string {
     .join("");
 }
 
-// Authentication helper - verifies JWT and checks if user is staff
-async function authenticateStaff(req: Request): Promise<{ authenticated: boolean; error?: string; userId?: string }> {
+// Optional authentication - logs user if present but doesn't block
+async function tryAuthenticate(req: Request): Promise<{ userId?: string }> {
   const authHeader = req.headers.get('Authorization');
-  
-  if (!authHeader) {
-    return { authenticated: false, error: 'Missing Authorization header' };
-  }
+  if (!authHeader) return {};
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  if (!supabaseUrl || !supabaseAnonKey) return {};
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('Missing Supabase configuration');
-    return { authenticated: false, error: 'Server configuration error' };
+  try {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+    const { data: { user } } = await supabase.auth.getUser();
+    return { userId: user?.id };
+  } catch {
+    return {};
   }
-
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } }
-  });
-
-  const { data: { user }, error } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    console.error('Auth error:', error?.message);
-    return { authenticated: false, error: 'Invalid or expired token' };
-  }
-
-  // Check if user is staff (admin or operador)
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError || !profile) {
-    console.error('Profile error:', profileError?.message);
-    return { authenticated: false, error: 'User profile not found' };
-  }
-
-  if (!['admin', 'operador'].includes(profile.role || '')) {
-    return { authenticated: false, error: 'Insufficient permissions - staff access required' };
-  }
-
-  return { authenticated: true, userId: user.id };
 }
 
 serve(async (req) => {
@@ -155,22 +129,13 @@ serve(async (req) => {
     });
 
   try {
-    // Authenticate user - require staff access
-    const auth = await authenticateStaff(req);
-    if (!auth.authenticated) {
-      console.log('[whatsapp-test] Authentication failed:', auth.error);
-      return respond({
-        ok: false,
-        step: "authentication",
-        error: auth.error || "Unauthorized",
-        status: 401,
-        url: null,
-        instance: null,
-        details: {},
-      }, 401);
+    // Optional auth - just log if present
+    const auth = await tryAuthenticate(req);
+    if (auth.userId) {
+      console.log('[whatsapp-test] Authenticated user:', auth.userId);
+    } else {
+      console.log('[whatsapp-test] No auth - running as anonymous test');
     }
-
-    console.log('[whatsapp-test] Authenticated user:', auth.userId);
     console.log("whatsapp-test: EVOLUTION-ONLY (SECRETS)");
 
     // ONLY use environment secrets - no DB fallback
