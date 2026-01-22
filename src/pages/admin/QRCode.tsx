@@ -29,9 +29,7 @@ export default function AdminQRCode() {
   const [generatingAll, setGeneratingAll] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
   
-  const baseUrl = typeof window !== 'undefined' 
-    ? `${window.location.origin}/aplicativo` 
-    : '/aplicativo';
+  const baseUrl = 'https://posto7.app/aplicativo';
 
   // Fetch capture points from database
   const { data: capturePoints, isLoading } = useQuery({
