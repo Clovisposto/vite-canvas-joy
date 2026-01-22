@@ -33,26 +33,27 @@ interface ImportResult {
 // Normaliza telefone para formato E.164 brasileiro
 const normalizePhone = (phone: string): string | null => {
   if (!phone) return null;
-  const digits = phone.replace(/\D/g, '');
   
-  if (digits.length < 10) return null;
-  if (digits.length > 13) return null;
+  // Remove tudo que não for dígito
+  let digits = phone.replace(/\D/g, '');
   
-  // Se começa com 0, remove
-  let normalized = digits;
-  if (normalized.startsWith('0')) {
-    normalized = normalized.slice(1);
+  // Mínimo 10 dígitos (DDD + 8), máximo 13 (55 + DDD + 9)
+  if (digits.length < 10 || digits.length > 13) return null;
+  
+  // Se começa com 0, remove (ex: 094991234567 -> 94991234567)
+  if (digits.startsWith('0')) {
+    digits = digits.slice(1);
   }
   
-  // Se não começa com 55, adiciona
-  if (!normalized.startsWith('55')) {
-    normalized = '55' + normalized;
+  // Se não começa com 55, adiciona código do país
+  if (!digits.startsWith('55')) {
+    digits = '55' + digits;
   }
   
-  // Deve ter 12 ou 13 dígitos (55 + DDD + 8 ou 9 dígitos)
-  if (normalized.length < 12 || normalized.length > 13) return null;
+  // Valida tamanho final: 12 (55+DDD+8) ou 13 (55+DDD+9) dígitos
+  if (digits.length < 12 || digits.length > 13) return null;
   
-  return normalized;
+  return digits;
 };
 
 // Detecta o separador do CSV
@@ -136,7 +137,9 @@ export default function CSVImportDialog({ open, onOpenChange, onImportComplete }
     
     try {
       const text = await selectedFile.text();
-      const lines = text.split('\n').filter(line => line.trim());
+      // Normaliza quebras de linha (Windows CRLF -> LF)
+      const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const lines = normalizedText.split('\n').filter(line => line.trim());
       
       if (lines.length < 2) {
         setError('Arquivo vazio ou sem dados');
@@ -145,7 +148,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImportComplete }
       }
       
       const separator = detectSeparator(lines[0]);
-      const headers = lines[0].split(separator).map(h => h.replace(/"/g, '').trim());
+      const headers = lines[0].split(separator).map(h => h.replace(/"/g, '').replace(/\r/g, '').trim());
       const { phoneIndex, nameIndex } = findColumns(headers);
       
       if (phoneIndex === -1) {
@@ -158,7 +161,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImportComplete }
       const seenPhones = new Set<string>();
       
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(separator).map(v => v.replace(/"/g, '').trim());
+        const values = lines[i].split(separator).map(v => v.replace(/"/g, '').replace(/\r/g, '').trim());
         const rawPhone = values[phoneIndex] || '';
         const rawName = nameIndex !== -1 ? values[nameIndex] : null;
         
@@ -233,14 +236,21 @@ export default function CSVImportDialog({ open, onOpenChange, onImportComplete }
     };
     
     try {
-      // Buscar telefones existentes
+      // Buscar telefones existentes em lotes (evita query muito grande)
       const phones = validContacts.map(c => c.phone);
-      const { data: existingCustomers } = await supabase
-        .from('customers')
-        .select('phone')
-        .in('phone', phones);
+      const existingPhones = new Set<string>();
+      const checkBatchSize = 100;
       
-      const existingPhones = new Set((existingCustomers || []).map(c => c.phone));
+      for (let i = 0; i < phones.length; i += checkBatchSize) {
+        const batch = phones.slice(i, i + checkBatchSize);
+        const { data } = await supabase
+          .from('customers')
+          .select('phone')
+          .in('phone', batch);
+        
+        (data || []).forEach(c => existingPhones.add(c.phone));
+        setProgress(Math.round((i / phones.length) * 20)); // 0-20% para checagem
+      }
       
       // Separar novos e existentes
       const newContacts = validContacts.filter(c => !existingPhones.has(c.phone));
@@ -268,7 +278,8 @@ export default function CSVImportDialog({ open, onOpenChange, onImportComplete }
           results.inserted += batch.length;
         }
         
-        setProgress(Math.round(((i + batch.length) / validContacts.length) * 100));
+        // Progress de 20-100% para inserção
+        setProgress(20 + Math.round(((i + batch.length) / validContacts.length) * 80));
       }
       
       // Atualizar nomes para contatos existentes (apenas se tiver nome)
