@@ -21,6 +21,7 @@ const pageTransition = {
 
 export interface CustomerData {
   phone: string;
+  name: string;
   acceptsRaffle: boolean;
   acceptsPromo: boolean;
   lgpdConsent: boolean;
@@ -40,6 +41,7 @@ export default function CustomerApp() {
   
   const [customerData, setCustomerData] = useState<CustomerData>({
     phone: '',
+    name: '',
     acceptsRaffle: true,
     acceptsPromo: true,
     lgpdConsent: true,
@@ -161,6 +163,7 @@ export default function CustomerApp() {
         .from('customers')
         .insert({
           phone: phoneE164,
+          name: customerData.name?.trim() || null,
           accepts_raffle: true,
           accepts_promo: true,
           lgpd_consent: true,
@@ -196,7 +199,7 @@ export default function CustomerApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: phoneE164,
-          name: null,
+          name: customerData.name?.trim() || null,
           acceptsPromo: customerData.acceptsPromo,
           acceptsRaffle: customerData.acceptsRaffle,
           consent: customerData.lgpdConsent,
@@ -239,7 +242,7 @@ console.log('PWA cadastro sucesso', { phoneE164, attendantCode: finalAttendantCo
   }, []);
 
   const handleAutoReset = useCallback(() => {
-    setCustomerData(prev => ({ ...prev, phone: '' }));
+    setCustomerData(prev => ({ ...prev, phone: '', name: '' }));
     setStep(1);
   }, []);
 
@@ -279,7 +282,9 @@ console.log('PWA cadastro sucesso', { phoneE164, attendantCode: finalAttendantCo
             <StepUnified 
               postoName={settings.posto_name || 'Posto 7'} 
               phone={customerData.phone}
+              name={customerData.name}
               onPhoneChange={(phone) => setCustomerData(prev => ({ ...prev, phone }))}
+              onNameChange={(name) => setCustomerData(prev => ({ ...prev, name }))}
               onSubmit={handleSubmit}
               loading={loading}
             />
