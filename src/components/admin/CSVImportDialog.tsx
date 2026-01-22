@@ -34,8 +34,19 @@ interface ImportResult {
 const normalizePhone = (phone: string): string | null => {
   if (!phone) return null;
   
+  let value = phone.trim();
+  
+  // Detectar notação científica (5,59E+12 ou 5.59E+12) - comum quando Excel exporta
+  const scientificPattern = /^(\d+[,.]?\d*)E\+?(\d+)$/i;
+  const match = value.replace(',', '.').match(scientificPattern);
+  if (match) {
+    const base = parseFloat(match[1]);
+    const exponent = parseInt(match[2], 10);
+    value = (base * Math.pow(10, exponent)).toFixed(0);
+  }
+  
   // Remove tudo que não for dígito
-  let digits = phone.replace(/\D/g, '');
+  let digits = value.replace(/\D/g, '');
   
   // Mínimo 10 dígitos (DDD + 8), máximo 13 (55 + DDD + 9)
   if (digits.length < 10 || digits.length > 13) return null;
