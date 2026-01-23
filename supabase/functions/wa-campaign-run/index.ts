@@ -311,17 +311,7 @@ Deno.serve(async (req) => {
     const optoutSet = new Set((optouts || []).map(o => o.phone_e164));
     console.log(`[Main] Loaded ${optoutSet.size} opt-outs`);
 
-    // Buscar clientes bloqueados (sem LGPD ou sem aceite promo) para filtro extra
-    const { data: blockedCustomers } = await supabase
-      .from('customers')
-      .select('phone')
-      .or('lgpd_consent.eq.false,lgpd_consent.is.null,accepts_promo.eq.false,accepts_promo.is.null');
-    
-    const blockedPhones = new Set((blockedCustomers || []).map(c => {
-      const digits = c.phone.replace(/\D/g, '');
-      return digits.startsWith('55') ? digits : '55' + digits;
-    }));
-    console.log(`[Main] Loaded ${blockedPhones.size} blocked phones (LGPD)`);
+    // REMOVIDO: Verificação de LGPD/accepts_promo agora é feita no frontend ao gerar a fila
 
     // Buscar recipients pendentes - com ou sem filtro de IDs
     let recipients: any[] = [];
@@ -409,16 +399,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Verificar LGPD bloqueado
-      if (blockedPhones.has(recipient.phone_e164)) {
-        await supabase
-          .from('whatsapp_campaign_recipients')
-          .update({ status: 'skipped', error: 'Sem consentimento LGPD' })
-          .eq('id', recipient.id);
-        skipped++;
-        console.log(`[${i + 1}/${recipients.length}] Skipped (LGPD): ${recipient.phone_e164}`);
-        continue;
-      }
+      // REMOVIDO: Verificação de LGPD agora é feita no frontend
 
       // Verificar status da campanha (pode ter sido pausada)
       const { data: currentCampaign } = await supabase
