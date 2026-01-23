@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Phone, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -65,6 +66,7 @@ export default function BulkPhoneInsertDialog({ open, onOpenChange, onImportComp
   const { toast } = useToast();
   const [rawText, setRawText] = useState('');
   const [name, setName] = useState('');
+  const [optInMarketing, setOptInMarketing] = useState(true);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [progress, setProgress] = useState(0);
@@ -72,6 +74,7 @@ export default function BulkPhoneInsertDialog({ open, onOpenChange, onImportComp
   const resetState = useCallback(() => {
     setRawText('');
     setName('');
+    setOptInMarketing(true);
     setResult(null);
     setProgress(0);
     setImporting(false);
@@ -153,9 +156,9 @@ export default function BulkPhoneInsertDialog({ open, onOpenChange, onImportComp
             batch.map(phone => ({
               phone,
               name: name.trim() || null,
-              lgpd_consent: false,
-              accepts_raffle: false,
-              accepts_promo: false,
+              lgpd_consent: optInMarketing,
+              accepts_raffle: optInMarketing,
+              accepts_promo: optInMarketing,
             }))
           );
         
@@ -230,6 +233,23 @@ export default function BulkPhoneInsertDialog({ open, onOpenChange, onImportComp
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
+              </div>
+
+              {/* Checkbox opt-in marketing */}
+              <div className="flex items-center space-x-2 p-3 bg-muted/50 rounded-lg">
+                <Checkbox
+                  id="opt-in-marketing"
+                  checked={optInMarketing}
+                  onCheckedChange={(checked) => setOptInMarketing(!!checked)}
+                />
+                <div className="flex-1">
+                  <Label htmlFor="opt-in-marketing" className="cursor-pointer font-medium">
+                    Marcar opt-in de marketing
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Habilita LGPD e aceite de promoções para aparecer em campanhas WhatsApp
+                  </p>
+                </div>
               </div>
 
               {/* Preview */}
