@@ -51,7 +51,8 @@ import {
   BarChart3,
   FileText,
   Copy,
-  Sparkles
+  Sparkles,
+  UserPlus
 } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -914,6 +915,13 @@ export default function RoboWhatsapp() {
       loadEligibleCustomers(selectedCampaign.id);
     }
   }, [selectedCampaign]);
+
+  // Recarregar clientes quando toggle showAllCustomers mudar
+  useEffect(() => {
+    if (selectedCampaign && showAddAndDispatchModal) {
+      loadEligibleCustomers(selectedCampaign.id);
+    }
+  }, [showAllCustomers]);
 
   // Carregar clientes elegíveis para seleção individual
   const loadEligibleCustomers = async (campaignId: string) => {
@@ -3820,17 +3828,39 @@ Auto Posto Pará – Economia de verdade!`}
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              Adicionar e Disparar
+              <UserPlus className="w-5 h-5 text-green-600" />
+              Adicionar Contatos e Disparar
             </DialogTitle>
             <DialogDescription>
               {selectedCampaign && (
-                <span>Selecione os clientes capturados pelo QR Code para a campanha: <strong>{selectedCampaign.name}</strong></span>
+                <>
+                  Campanha: <strong>{selectedCampaign.name}</strong>
+                  <br />
+                  <span className="text-xs">
+                    {eligibleCustomers.filter(c => c.lgpd_consent && c.accepts_promo).length} com opt-in | {eligibleCustomers.filter(c => !c.lgpd_consent || !c.accepts_promo).length} importados
+                  </span>
+                </>
               )}
             </DialogDescription>
           </DialogHeader>
           
           <div className="flex-1 overflow-hidden flex flex-col gap-3">
+            {/* Toggle para incluir clientes importados */}
+            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <Checkbox
+                id="show-all-quick-dispatch"
+                checked={showAllCustomers}
+                onCheckedChange={(checked) => setShowAllCustomers(!!checked)}
+              />
+              <Label htmlFor="show-all-quick-dispatch" className="cursor-pointer text-sm flex-1">
+                <span className="font-medium">Incluir clientes importados</span>
+                <span className="text-muted-foreground ml-1">(sem LGPD/opt-in)</span>
+              </Label>
+              <Badge variant="outline" className={showAllCustomers ? "text-amber-600 border-amber-300" : "text-green-600 border-green-300"}>
+                {showAllCustomers ? 'Todos' : 'Apenas opt-in'}
+              </Badge>
+            </div>
+
             {/* Busca */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -3928,8 +3958,16 @@ Auto Posto Pará – Economia de verdade!`}
                           )}
                         </div>
                         <div className="flex gap-1">
-                          <Badge variant="secondary" className="text-xs">LGPD</Badge>
-                          <Badge variant="secondary" className="text-xs">MKT</Badge>
+                          {customer.lgpd_consent ? (
+                            <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">LGPD</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Sem LGPD</Badge>
+                          )}
+                          {customer.accepts_promo ? (
+                            <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">MKT</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Sem MKT</Badge>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -3938,7 +3976,11 @@ Auto Posto Pará – Economia de verdade!`}
                     <div className="text-center py-8 text-muted-foreground">
                       <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">Nenhum cliente elegível disponível</p>
-                      <p className="text-xs mt-1">Clientes com LGPD + Marketing aceitos e não na fila</p>
+                      <p className="text-xs mt-1">
+                        {showAllCustomers 
+                          ? 'Nenhum cliente cadastrado ou todos já estão na fila' 
+                          : 'Ative "Incluir clientes importados" para ver mais contatos'}
+                      </p>
                     </div>
                   )}
                 </div>
