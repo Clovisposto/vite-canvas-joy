@@ -58,6 +58,13 @@ export default function StepUnified({
   };
 
   const validate = () => {
+    // Validar nome (obrigatório)
+    const trimmedName = name.trim();
+    if (!trimmedName || trimmedName.length < 2) {
+      setError('Por favor, informe seu nome.');
+      return false;
+    }
+
     const digits = phone.replace(/\D/g, '');
     
     // Celular brasileiro: DDD (2 dígitos) + 9 + 8 dígitos = 11 dígitos
