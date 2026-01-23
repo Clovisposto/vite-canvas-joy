@@ -60,7 +60,19 @@ Regras:
     });
 
     const data = await response.json();
-    const spintax = data.choices[0]?.message?.content?.trim();
+    
+    // Validate OpenAI response
+    if (!response.ok || !data.choices || !data.choices[0]) {
+      console.error('[ai-generate-variations] OpenAI error:', JSON.stringify(data));
+      return new Response(JSON.stringify({ 
+        error: data.error?.message || 'OpenAI API returned an error' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    const spintax = data.choices[0].message?.content?.trim();
 
     return new Response(JSON.stringify({ spintax }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
