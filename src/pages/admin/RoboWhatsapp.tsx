@@ -261,6 +261,7 @@ export default function RoboWhatsapp() {
   const [eligibleCustomers, setEligibleCustomers] = useState<EligibleCustomer[]>([]);
   const [selectedCustomers, setSelectedCustomers] = useState<Set<string>>(new Set());
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [showAllCustomers, setShowAllCustomers] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
 
   // Estados para conexão WhatsApp
@@ -919,12 +920,17 @@ export default function RoboWhatsapp() {
     setLoadingCustomers(true);
     setSelectedCustomers(new Set());
     try {
-      // Buscar clientes que aceitam promoções E têm consentimento LGPD
-      const { data: customers, error: customersError } = await supabase
+      // Buscar clientes - com ou sem filtro de opt-in
+      let query = supabase
         .from('customers')
-        .select('phone, name, accepts_promo, lgpd_consent')
-        .eq('accepts_promo', true)
-        .eq('lgpd_consent', true);
+        .select('phone, name, accepts_promo, lgpd_consent');
+      
+      // Se não mostrar todos, filtrar apenas com opt-in
+      if (!showAllCustomers) {
+        query = query.eq('accepts_promo', true).eq('lgpd_consent', true);
+      }
+      
+      const { data: customers, error: customersError } = await query;
       
       if (customersError) throw customersError;
 
@@ -3106,7 +3112,9 @@ Auto Posto Pará – Economia de verdade!`}
                           Clientes Elegíveis ({eligibleCustomers.length} disponíveis)
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          Clientes com LGPD + Marketing aceitos, não em opt-out e não na fila.
+                          {showAllCustomers 
+                            ? 'Mostrando todos os clientes cadastrados (incluindo sem opt-in).'
+                            : 'Clientes com LGPD + Marketing aceitos, não em opt-out e não na fila.'}
                         </p>
                       </div>
                       <Button 
@@ -3117,6 +3125,22 @@ Auto Posto Pará – Economia de verdade!`}
                       >
                         <RefreshCw className={`w-4 h-4 ${loadingCustomers ? 'animate-spin' : ''}`} />
                       </Button>
+                    </div>
+
+                    {/* Toggle para mostrar todos os clientes */}
+                    <div className="flex items-center space-x-2 p-2 bg-muted/50 rounded-lg">
+                      <Checkbox
+                        id="show-all-customers"
+                        checked={showAllCustomers}
+                        onCheckedChange={(checked) => {
+                          setShowAllCustomers(!!checked);
+                          // Recarregar ao mudar
+                          setTimeout(() => loadEligibleCustomers(selectedCampaign.id), 0);
+                        }}
+                      />
+                      <Label htmlFor="show-all-customers" className="cursor-pointer text-sm">
+                        Mostrar todos os clientes (incluir sem opt-in de marketing)
+                      </Label>
                     </div>
 
                     {/* Busca */}
