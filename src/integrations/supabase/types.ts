@@ -1128,10 +1128,13 @@ export type Database = {
           created_at: string
           customer_id: string | null
           customer_name: string | null
+          dispatch_latency_ms: number | null
           error: string | null
           id: string
           phone_e164: string
+          provider_message_id: string | null
           sent_at: string | null
+          sent_content: string | null
           status: string | null
         }
         Insert: {
@@ -1139,10 +1142,13 @@ export type Database = {
           created_at?: string
           customer_id?: string | null
           customer_name?: string | null
+          dispatch_latency_ms?: number | null
           error?: string | null
           id?: string
           phone_e164: string
+          provider_message_id?: string | null
           sent_at?: string | null
+          sent_content?: string | null
           status?: string | null
         }
         Update: {
@@ -1150,10 +1156,13 @@ export type Database = {
           created_at?: string
           customer_id?: string | null
           customer_name?: string | null
+          dispatch_latency_ms?: number | null
           error?: string | null
           id?: string
           phone_e164?: string
+          provider_message_id?: string | null
           sent_at?: string | null
+          sent_content?: string | null
           status?: string | null
         }
         Relationships: [

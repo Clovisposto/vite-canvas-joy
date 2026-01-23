@@ -456,7 +456,7 @@ Deno.serve(async (req) => {
       const dispatchLatency = Date.now() - startTime;
 
       if (sendResult.ok) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('whatsapp_campaign_recipients')
           .update({ 
             status: 'sent', 
@@ -466,6 +466,11 @@ Deno.serve(async (req) => {
             sent_content: message
           })
           .eq('id', recipient.id);
+        
+        if (updateError) {
+          console.error(`[${i + 1}/${recipients.length}] UPDATE error (sent):`, updateError);
+        }
+        
         sent++;
         tunnelErrors = 0; // Reset após sucesso
         console.log(`[${i + 1}/${recipients.length}] ✓ Sent to ${recipient.phone_e164}`);
@@ -504,13 +509,18 @@ Deno.serve(async (req) => {
           console.log(`[${i + 1}/${recipients.length}] ✗ Other error: ${errorMsg}`);
         }
         
-        await supabase
+        const { error: updateError } = await supabase
           .from('whatsapp_campaign_recipients')
           .update({ 
             status: 'failed', 
             error: errorMsg.substring(0, 500)
           })
           .eq('id', recipient.id);
+        
+        if (updateError) {
+          console.error(`[${i + 1}/${recipients.length}] UPDATE error (failed):`, updateError);
+        }
+        
         failed++;
         
         // Só para se forem 3 erros de TÚNEL consecutivos
