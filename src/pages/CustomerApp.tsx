@@ -39,8 +39,22 @@ export default function CustomerApp() {
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [initError, setInitError] = useState<string | null>(null);
   
+  // Função para formatar telefone para exibição
+  const formatPhoneForDisplay = (phone: string | null): string => {
+    if (!phone) return '';
+    const digits = phone.replace(/\D/g, '').slice(0, 11);
+    // Remove prefixo 55 se existir para exibição
+    const localDigits = digits.startsWith('55') ? digits.slice(2) : digits;
+    if (localDigits.length <= 2) return localDigits;
+    if (localDigits.length <= 7) return `(${localDigits.slice(0, 2)}) ${localDigits.slice(2)}`;
+    return `(${localDigits.slice(0, 2)}) ${localDigits.slice(2, 7)}-${localDigits.slice(7)}`;
+  };
+
+  // Captura telefone da URL (do QR code)
+  const phoneFromUrl = searchParams.get('phone') || searchParams.get('tel') || searchParams.get('telefone') || '';
+
   const [customerData, setCustomerData] = useState<CustomerData>({
-    phone: '',
+    phone: formatPhoneForDisplay(phoneFromUrl),
     name: '',
     acceptsRaffle: true,
     acceptsPromo: true,
