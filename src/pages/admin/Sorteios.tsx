@@ -226,9 +226,9 @@ export default function AdminSorteios() {
     
     try {
       const { data: eligible } = await supabase
-        .from('customers')
+        .from('wa_contacts')
         .select('id, phone, name')
-        .eq('accepts_raffle', true);
+        .eq('opt_in', true);
       
       if (!eligible || eligible.length === 0) {
         toast({ title: 'Nenhum cliente elegível', description: 'Não há clientes que aceitaram participar do sorteio.', variant: 'destructive' });

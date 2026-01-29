@@ -159,24 +159,19 @@ export default function CustomerApp() {
     }
     
     try {
+      // Upsert no wa_contacts (a tabela de contatos correta)
       const { error: e1 } = await supabase
-        .from('customers')
-        .insert({
+        .from('wa_contacts')
+        .upsert({
           phone: phoneE164,
           name: customerData.name?.trim() || null,
-          accepts_raffle: true,
-          accepts_promo: true,
-          lgpd_consent: true,
-          lgpd_consent_timestamp: consentTimestamp,
-          lgpd_version: '1.0',
-          consent_text_version: consentVersion,
-          consent_source: 'implicit_button',
-          marketing_opt_in_at: consentTimestamp
-        });
+          opt_in: true,
+          opt_in_timestamp: consentTimestamp,
+        }, { onConflict: 'phone' });
 
-      if (e1 && e1.code !== '23505') {
-        console.error('PWA cadastro erro customers', { e1, phoneE164 });
-        throw e1;
+      if (e1) {
+        console.error('PWA cadastro erro wa_contacts', { e1, phoneE164 });
+        // Continuar mesmo se falhar o upsert do contato
       }
 
       const { data: rpcResult, error: rpcError } = await supabase.rpc('public_create_checkin_and_token', {

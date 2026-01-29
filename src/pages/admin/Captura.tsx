@@ -122,18 +122,18 @@ export default function AdminCaptura() {
         return;
       }
 
-      // Buscar customers separadamente pelo telefone (já que customer_id pode estar null)
+      // Buscar wa_contacts separadamente pelo telefone
       const phones = [...new Set((checkinsData || []).map(c => c.phone))];
       
-      let customersMap: Record<string, any> = {};
+      let contactsMap: Record<string, any> = {};
       if (phones.length > 0) {
-        const { data: customersData } = await supabase
-          .from('customers')
-          .select('phone, name, accepts_raffle, accepts_promo, lgpd_consent, lgpd_consent_timestamp, consent_text_version, marketing_opt_in_at')
+        const { data: contactsData } = await supabase
+          .from('wa_contacts')
+          .select('phone, name, opt_in')
           .in('phone', phones);
         
-        if (customersData) {
-          customersMap = customersData.reduce((acc, c) => {
+        if (contactsData) {
+          contactsMap = contactsData.reduce((acc, c) => {
             acc[c.phone] = c;
             return acc;
           }, {} as Record<string, any>);
@@ -158,12 +158,12 @@ export default function AdminCaptura() {
         }
       }
 
-      // Combinar checkins com customers e capture points
+      // Combinar checkins com contacts e capture points
       const enrichedCheckins = (checkinsData || []).map(checkin => {
         const capturePoint = checkin.tag ? capturePointsMap[checkin.tag] : null;
         return {
           ...checkin,
-          customers: customersMap[checkin.phone] || null,
+          customers: contactsMap[checkin.phone] || null,
           capture_point: capturePoint,
           // Preencher frentista/terminal do ponto de captura
           derived_terminal_id: capturePoint?.terminal_id || null,
@@ -191,7 +191,7 @@ export default function AdminCaptura() {
     setCustomersLoading(true);
     try {
       let query = supabase
-        .from('customers')
+        .from('wa_contacts')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -203,9 +203,9 @@ export default function AdminCaptura() {
       const { data, error } = await query.limit(1000);
       
       if (error) {
-        console.error('Erro ao buscar clientes:', error);
+        console.error('Erro ao buscar contatos:', error);
         toast({
-          title: 'Erro ao carregar clientes',
+          title: 'Erro ao carregar contatos',
           description: error.message,
           variant: 'destructive',
         });
@@ -217,7 +217,7 @@ export default function AdminCaptura() {
     } catch (err: any) {
       console.error('Erro inesperado:', err);
       toast({
-        title: 'Erro ao carregar clientes',
+        title: 'Erro ao carregar contatos',
         description: err?.message || 'Erro inesperado',
         variant: 'destructive',
       });

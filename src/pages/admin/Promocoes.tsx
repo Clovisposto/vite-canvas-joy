@@ -96,7 +96,7 @@ export default function AdminPromocoes() {
   };
 
   const fetchCustomersCount = async () => {
-    const { count } = await supabase.from('customers').select('*', { count: 'exact', head: true }).eq('accepts_promo', true);
+    const { count } = await supabase.from('wa_contacts').select('*', { count: 'exact', head: true }).eq('opt_in', true);
     setCustomersCount(count || 0);
   };
 
@@ -130,16 +130,16 @@ export default function AdminPromocoes() {
 
       if (promoError) throw promoError;
 
-      // Get all customers who accept promos
-      const { data: customers } = await supabase.from('customers').select('id, phone, name').eq('accepts_promo', true);
+      // Get all contacts who accept promos
+      const { data: contacts } = await supabase.from('wa_contacts').select('id, phone, name').eq('opt_in', true);
 
-      if (customers && customers.length > 0) {
+      if (contacts && contacts.length > 0) {
         const message = `🔥 PROMOÇÃO RELÂMPAGO! 🔥\n\n${flashForm.title}\n\n${flashForm.message}${flashForm.discount_value ? `\n\n💰 Desconto: R$ ${flashForm.discount_value}` : ''}\n\n⏰ Válido por 24 horas!`;
 
         // Create message queue entries
-        const messages = customers.map(customer => ({
-          customer_id: customer.id,
-          phone: customer.phone,
+        const messages = contacts.map(contact => ({
+          customer_id: contact.id,
+          phone: contact.phone,
           promotion_id: promo.id,
           message,
           status: 'pending'
@@ -152,7 +152,7 @@ export default function AdminPromocoes() {
 
         const { data: result, error: sendError } = await supabase.functions.invoke('wa-send', {
           body: {
-            customers: customers.map((c) => ({ phone: c.phone, name: c.name })),
+            customers: contacts.map((c) => ({ phone: c.phone, name: c.name })),
             message,
           },
         });
@@ -214,22 +214,22 @@ export default function AdminPromocoes() {
       return;
     }
 
-    const { data: customers } = await supabase
-      .from('customers')
+    const { data: contactsData } = await supabase
+      .from('wa_contacts')
       .select('phone, name, created_at')
-      .eq('accepts_promo', true)
+      .eq('opt_in', true)
       .order('created_at', { ascending: false });
 
-    if (!customers || customers.length === 0) {
-      toast({ title: 'Nenhum cliente encontrado', variant: 'destructive' });
+    if (!contactsData || contactsData.length === 0) {
+      toast({ title: 'Nenhum contato encontrado', variant: 'destructive' });
       return;
     }
 
     const message = `🔥 PROMOÇÃO RELÂMPAGO! 🔥\n\n${flashForm.title}\n\n${flashForm.message}${flashForm.discount_value ? `\n\n💰 Desconto: R$ ${flashForm.discount_value}` : ''}\n\n⏰ Válido por 24 horas!`;
     
     setManualMessage(message);
-    setAllCustomers(customers);
-    setSelectedContacts(new Set(customers.map((_, i) => i))); // Selecionar todos por padrão
+    setAllCustomers(contactsData);
+    setSelectedContacts(new Set(contactsData.map((_, i) => i))); // Selecionar todos por padrão
     setDialogStep('select');
     setSearchTerm('');
     setDateFrom('');

@@ -255,7 +255,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImportComplete }
       for (let i = 0; i < phones.length; i += checkBatchSize) {
         const batch = phones.slice(i, i + checkBatchSize);
         const { data } = await supabase
-          .from('customers')
+          .from('wa_contacts')
           .select('phone')
           .in('phone', batch);
         
@@ -272,14 +272,12 @@ export default function CSVImportDialog({ open, onOpenChange, onImportComplete }
         const batch = newContacts.slice(i, i + batchSize);
         
         const { error } = await supabase
-          .from('customers')
+          .from('wa_contacts')
           .insert(
             batch.map(c => ({
               phone: c.phone,
               name: c.name || null,
-              lgpd_consent: false,
-              accepts_raffle: false,
-              accepts_promo: false,
+              opt_in: false,
             }))
           );
         
@@ -299,7 +297,7 @@ export default function CSVImportDialog({ open, onOpenChange, onImportComplete }
         
         for (const contact of batch) {
           const { error } = await supabase
-            .from('customers')
+            .from('wa_contacts')
             .update({ name: contact.name })
             .eq('phone', contact.phone)
             .is('name', null); // Só atualiza se não tiver nome

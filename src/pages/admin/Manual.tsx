@@ -36,14 +36,11 @@ export default function AdminManual() {
       
       for (let i = 0; i < fakePhones.length; i++) {
         const phone = fakePhones[i];
-        await supabase.from('customers').upsert({
+        await supabase.from('wa_contacts').upsert({
           phone,
           name: `Cliente Demo ${i + 1}`,
-          accepts_raffle: true,
-          accepts_promo: i % 2 === 0,
-          lgpd_consent: true,
-          lgpd_consent_timestamp: new Date().toISOString(),
-          lgpd_version: '1.0'
+          opt_in: true,
+          opt_in_timestamp: new Date().toISOString(),
         }, { onConflict: 'phone' });
       }
       addStep("✓ 5 clientes criados com sucesso");
@@ -106,18 +103,18 @@ export default function AdminManual() {
         .maybeSingle();
 
       if (raffle) {
-        const { data: eligibleCustomers } = await supabase
-          .from('customers')
+        const { data: eligibleContacts } = await supabase
+          .from('wa_contacts')
           .select('id, phone, name')
-          .eq('accepts_raffle', true)
+          .eq('opt_in', true)
           .limit(10);
 
-        const winners = (eligibleCustomers || []).slice(0, Math.min(raffle.winners_count || 3, eligibleCustomers?.length || 0));
+        const winners = (eligibleContacts || []).slice(0, Math.min(raffle.winners_count || 3, eligibleContacts?.length || 0));
         
         await supabase.from('raffle_runs').insert({
           raffle_id: raffle.id,
           is_test: true,
-          eligible_count: eligibleCustomers?.length || 0,
+          eligible_count: eligibleContacts?.length || 0,
           winners: winners.map(w => ({ id: w.id, phone: w.phone, name: w.name })),
           seed: `demo_${Date.now()}`,
           executed_by: user?.id

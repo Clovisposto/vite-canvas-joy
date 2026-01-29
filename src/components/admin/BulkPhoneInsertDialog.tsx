@@ -127,14 +127,14 @@ export default function BulkPhoneInsertDialog({ open, onOpenChange, onImportComp
     };
 
     try {
-      // Buscar telefones existentes
+      // Buscar telefones existentes na tabela wa_contacts
       const existingPhones = new Set<string>();
       const checkBatchSize = 100;
 
       for (let i = 0; i < validPhones.length; i += checkBatchSize) {
         const batch = validPhones.slice(i, i + checkBatchSize);
         const { data } = await supabase
-          .from('customers')
+          .from('wa_contacts')
           .select('phone')
           .in('phone', batch);
         
@@ -151,14 +151,12 @@ export default function BulkPhoneInsertDialog({ open, onOpenChange, onImportComp
         const batch = newPhones.slice(i, i + batchSize);
         
         const { error } = await supabase
-          .from('customers')
+          .from('wa_contacts')
           .insert(
             batch.map(phone => ({
               phone,
               name: name.trim() || null,
-              lgpd_consent: optInMarketing,
-              accepts_raffle: optInMarketing,
-              accepts_promo: optInMarketing,
+              opt_in: optInMarketing,
             }))
           );
         
