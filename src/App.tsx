@@ -35,6 +35,7 @@ import PontosCaptura from "./pages/admin/PontosCaptura";
 import QRPremiacao from "./pages/admin/QRPremiacao";
 import PremioValidacao from "./pages/PremioValidacao";
 import RoboWhatsapp from "./pages/admin/RoboWhatsapp";
+import AIAssistant from "./pages/admin/AIAssistant";
 import RoleGuard from "./components/RoleGuard";
 
 const queryClient = new QueryClient();
@@ -85,6 +86,7 @@ function App() {
               <Route path="/admin/robo-whatsapp" element={<RoleGuard requiredRole="admin"><RoboWhatsapp /></RoleGuard>} />
               <Route path="/admin/configuracoes" element={<RoleGuard requiredRole="admin"><AdminConfiguracoes /></RoleGuard>} />
               <Route path="/admin/livro-caixa" element={<RoleGuard requiredRole="admin"><LivroCaixa /></RoleGuard>} />
+              <Route path="/admin/ai-assistant" element={<RoleGuard requiredRole="admin"><AIAssistant /></RoleGuard>} />
               
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -50,6 +50,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { href: '/admin', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/admin/ai-assistant', icon: Bot, label: 'Assistente IA', requiredRole: 'admin' },
   { href: '/admin/captura', icon: Users, label: 'Captura de Cliente', requiredRole: 'staff' },
   { href: '/admin/frentista', icon: CreditCard, label: 'Frentista / Stone', requiredRole: 'staff' },
   { href: '/admin/relatorio-frentistas', icon: FileBarChart, label: 'Relatório Frentistas', requiredRole: 'staff' },
@@ -59,7 +60,6 @@ const menuItems: MenuItem[] = [
   { href: '/admin/historico-sorteios', icon: History, label: 'Histórico Sorteios', requiredRole: 'staff' },
   { href: '/admin/promocoes', icon: Percent, label: 'Promoções', requiredRole: 'staff' },
   { href: '/admin/atendimento', icon: MessageSquare, label: 'Atendimento', requiredRole: 'staff' },
-  // Avaliações removido do menu
   { href: '/admin/whatsapp', icon: MessageCircle, label: 'WhatsApp', requiredRole: 'admin' },
   { href: '/admin/robo-whatsapp', icon: Bot, label: 'Robô WhatsApp', requiredRole: 'admin' },
   { href: '/admin/integracoes', icon: Upload, label: 'Integrações', requiredRole: 'admin' },
