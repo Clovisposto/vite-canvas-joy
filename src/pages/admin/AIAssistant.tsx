@@ -14,10 +14,14 @@ import {
   Mic,
   MicOff,
   Volume2,
-  VolumeX
+  VolumeX,
+  History,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface Message {
   id: string;
@@ -26,7 +30,7 @@ interface Message {
   timestamp: Date;
 }
 
-// Correct Supabase URL and key (not using env vars which are undefined)
+// Correct Supabase URL and key
 const SUPABASE_URL = "https://womgorjjweikolfhrhgp.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvbWdvcmpqd2Vpa29sZmhyaGdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MzE2MTMsImV4cCI6MjA4NDUwNzYxM30.Y9Dl1upWiVcPX0HvigrHdQ3mk0j_VKOma0nJJY0R2ls";
 const CHAT_URL = `${SUPABASE_URL}/functions/v1/ai-assistant`;
@@ -90,25 +94,17 @@ const quickCommands = [
 // Helper function to clean markdown for speech
 const cleanTextForSpeech = (text: string): string => {
   return text
-    // Remove markdown headers
     .replace(/#{1,6}\s*/g, '')
-    // Remove bold/italic markers
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/__([^_]+)__/g, '$1')
     .replace(/_([^_]+)_/g, '$1')
-    // Remove code blocks
     .replace(/```[\s\S]*?```/g, '')
     .replace(/`([^`]+)`/g, '$1')
-    // Remove links but keep text
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    // Remove bullet points
     .replace(/^[\s]*[-*+]\s*/gm, '')
-    // Remove numbered lists markers
     .replace(/^[\s]*\d+\.\s*/gm, '')
-    // Remove emojis (basic)
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-    // Clean up extra whitespace
     .replace(/\n{3,}/g, '\n\n')
     .replace(/\s{2,}/g, ' ')
     .trim();
@@ -123,17 +119,105 @@ export default function AIAssistant() {
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [voiceSupported, setVoiceSupported] = useState(false);
   const [ttsSupported, setTtsSupported] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const { toast } = useToast();
+
+  // Load user and chat history from Supabase
+  useEffect(() => {
+    const loadUserAndHistory = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        await loadChatHistory(user.id);
+      }
+    };
+    loadUserAndHistory();
+  }, []);
+
+  // Load chat history from Supabase
+  const loadChatHistory = async (uid: string) => {
+    setIsLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('ai_chat_history')
+        .select('*')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: true })
+        .limit(50);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const loadedMessages: Message[] = data.map((row) => ({
+          id: row.id,
+          role: row.role as 'user' | 'assistant',
+          content: row.content,
+          timestamp: new Date(row.created_at),
+        }));
+        setMessages(loadedMessages);
+        toast({
+          title: "Histórico carregado",
+          description: `${data.length} mensagens recuperadas`,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // Save message to Supabase
+  const saveMessageToHistory = async (role: 'user' | 'assistant', content: string) => {
+    if (!userId) return;
+    
+    try {
+      await supabase.from('ai_chat_history').insert({
+        user_id: userId,
+        role,
+        content,
+      });
+    } catch (error) {
+      console.error('Error saving message to history:', error);
+    }
+  };
+
+  // Clear chat history from Supabase
+  const clearChatHistory = async () => {
+    if (!userId) {
+      setMessages([]);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('ai_chat_history')
+        .delete()
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      setMessages([]);
+      toast({
+        title: "Histórico limpo",
+        description: "Todas as conversas foram removidas",
+      });
+    } catch (error) {
+      console.error('Error clearing chat history:', error);
+      setMessages([]);
+    }
+  };
 
   // Speak text using Web Speech API TTS
   const speakText = useCallback((text: string) => {
     if (!synthRef.current || !voiceEnabled || !ttsSupported) return;
     
-    // Cancel any ongoing speech
     synthRef.current.cancel();
     
     const cleanedText = cleanTextForSpeech(text);
@@ -145,7 +229,6 @@ export default function AIAssistant() {
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
     
-    // Try to find a Portuguese voice
     const voices = synthRef.current.getVoices();
     const ptVoice = voices.find(v => v.lang.startsWith('pt')) || voices[0];
     if (ptVoice) {
@@ -160,7 +243,6 @@ export default function AIAssistant() {
     synthRef.current.speak(utterance);
   }, [voiceEnabled, ttsSupported]);
 
-  // Stop speaking
   const stopSpeaking = useCallback(() => {
     if (synthRef.current) {
       synthRef.current.cancel();
@@ -170,7 +252,6 @@ export default function AIAssistant() {
 
   // Initialize speech recognition and synthesis
   useEffect(() => {
-    // Speech Recognition (STT)
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (SpeechRecognitionAPI) {
@@ -202,12 +283,10 @@ export default function AIAssistant() {
       };
     }
 
-    // Speech Synthesis (TTS)
     if ('speechSynthesis' in window) {
       synthRef.current = window.speechSynthesis;
       setTtsSupported(true);
       
-      // Load voices (they may not be available immediately)
       const loadVoices = () => {
         synthRef.current?.getVoices();
       };
@@ -246,7 +325,6 @@ export default function AIAssistant() {
     if (isListening) {
       recognitionRef.current.stop();
     } else {
-      // Stop any ongoing speech when starting to listen
       stopSpeaking();
       try {
         recognitionRef.current.start();
@@ -266,7 +344,6 @@ export default function AIAssistant() {
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
 
-    // Stop any ongoing speech when sending a new message
     stopSpeaking();
 
     const userMessage: Message = {
@@ -279,6 +356,9 @@ export default function AIAssistant() {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+
+    // Save user message to history
+    await saveMessageToHistory('user', text.trim());
 
     let assistantContent = '';
     let fullResponse = '';
@@ -374,9 +454,13 @@ export default function AIAssistant() {
         }
       }
 
+      // Save assistant response to history
+      if (fullResponse) {
+        await saveMessageToHistory('assistant', fullResponse);
+      }
+
       // Speak the complete response after streaming is done
       if (fullResponse && voiceEnabled) {
-        // Small delay to ensure UI is updated
         setTimeout(() => {
           speakText(fullResponse);
         }, 100);
@@ -385,10 +469,11 @@ export default function AIAssistant() {
     } catch (error) {
       console.error('AI Assistant error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      const errorContent = `❌ **Erro:** ${errorMessage}\n\nTente novamente em alguns segundos.`;
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: `❌ **Erro:** ${errorMessage}\n\nTente novamente em alguns segundos.`,
+        content: errorContent,
         timestamp: new Date(),
       }]);
     } finally {
@@ -410,7 +495,13 @@ export default function AIAssistant() {
 
   const clearHistory = () => {
     stopSpeaking();
-    setMessages([]);
+    clearChatHistory();
+  };
+
+  const refreshHistory = async () => {
+    if (userId) {
+      await loadChatHistory(userId);
+    }
   };
 
   return (
@@ -428,11 +519,28 @@ export default function AIAssistant() {
                 Pergunte qualquer coisa sobre o sistema
                 {voiceSupported && ' • 🎤 Voz'}
                 {ttsSupported && ' • 🔊 Leitura'}
+                {userId && ' • 💾 Histórico salvo'}
               </p>
             </div>
           </div>
           
           <div className="flex items-center gap-2">
+            {/* History refresh button */}
+            {userId && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={refreshHistory}
+                disabled={isLoadingHistory}
+              >
+                {isLoadingHistory ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <History className="w-4 h-4" />
+                )}
+              </Button>
+            )}
+            
             {/* TTS Toggle */}
             {ttsSupported && (
               <Button 
@@ -467,7 +575,12 @@ export default function AIAssistant() {
         {/* Chat area */}
         <Card className="flex-1 flex flex-col overflow-hidden border-border/50">
           <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-            {messages.length === 0 ? (
+            {isLoadingHistory ? (
+              <div className="flex flex-col items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
+                <span className="text-muted-foreground">Carregando histórico...</span>
+              </div>
+            ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-12">
                 <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mb-4">
                   <Bot className="w-8 h-8 text-primary" />
@@ -487,6 +600,11 @@ export default function AIAssistant() {
                   {ttsSupported && (
                     <span className="px-3 py-1 bg-primary/10 text-primary rounded-full">
                       🔊 Respostas por voz
+                    </span>
+                  )}
+                  {userId && (
+                    <span className="px-3 py-1 bg-primary/10 text-primary rounded-full">
+                      💾 Histórico persistente
                     </span>
                   )}
                 </div>
@@ -641,7 +759,8 @@ export default function AIAssistant() {
             
             <p className="text-xs text-muted-foreground mt-2 text-center">
               {voiceSupported && '🎤 Microfone para falar • '}
-              {ttsSupported && '🔊 Respostas por voz automáticas • '}
+              {ttsSupported && '🔊 Respostas por voz • '}
+              {userId && '💾 Histórico salvo • '}
               Acesso somente leitura aos dados
             </p>
           </CardContent>
