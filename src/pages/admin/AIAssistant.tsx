@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,7 +20,9 @@ import {
   Play,
   AlertTriangle,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Navigation,
+  Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -35,6 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from '@/components/ui/badge';
 
 interface Message {
   id: string;
@@ -44,7 +48,7 @@ interface Message {
 }
 
 interface ActionRequest {
-  type: 'create_promotion' | 'create_campaign' | 'send_campaign' | 'create_raffle' | 'resolve_complaint';
+  type: 'create_promotion' | 'create_campaign' | 'send_campaign' | 'create_raffle' | 'resolve_complaint' | 'navigate' | 'update_settings';
   params: Record<string, unknown>;
   description: string;
 }
@@ -122,6 +126,26 @@ const actionTypeLabels: Record<string, string> = {
   send_campaign: '🚀 Disparar Campanha',
   create_raffle: '🎰 Criar Sorteio',
   resolve_complaint: '✅ Resolver Reclamação',
+  navigate: '🧭 Navegar',
+  update_settings: '⚙️ Alterar Configuração',
+};
+
+// Route labels for navigation
+const routeLabels: Record<string, string> = {
+  '/admin/captura': 'Captura de Clientes',
+  '/admin/producao': 'Produção/Check-ins',
+  '/admin/sorteios': 'Sorteios',
+  '/admin/promocoes': 'Promoções',
+  '/admin/whatsapp': 'Campanhas WhatsApp',
+  '/admin/robo-whatsapp': 'Robô WhatsApp',
+  '/admin/atendimento': 'Atendimento',
+  '/admin/livro-caixa': 'Livro Caixa',
+  '/admin/qr-code': 'Gerador QR Code',
+  '/admin/frentista': 'Frentistas',
+  '/admin/configuracoes': 'Configurações',
+  '/admin/manual': 'Manual',
+  '/admin/ia': 'Assistente IA',
+  '/admin/dashboard': 'Dashboard',
 };
 
 // Helper function to clean markdown for speech
@@ -170,6 +194,7 @@ const removeActionBlocks = (content: string): string => {
 };
 
 export default function AIAssistant() {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -183,6 +208,7 @@ export default function AIAssistant() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [isExecutingAction, setIsExecutingAction] = useState(false);
   const [actionResults, setActionResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
+  const [is24hMode, setIs24hMode] = useState(true);
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -283,13 +309,46 @@ export default function AIAssistant() {
     setIsExecutingAction(true);
     
     try {
+      // Handle navigation actions locally
+      if (action.type === 'navigate') {
+        const route = action.params.route as string;
+        if (route && routeLabels[route]) {
+          navigate(route);
+          const result = { success: true, message: `Navegando para ${routeLabels[route]}` };
+          
+          if (pendingAction) {
+            setActionResults(prev => new Map(prev).set(pendingAction.messageId, result));
+          }
+          
+          const resultMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: `✅ **Navegação executada!**\n\nAbrindo ${routeLabels[route]}...`,
+            timestamp: new Date(),
+          };
+          
+          setMessages(prev => [...prev, resultMessage]);
+          await saveMessageToHistory('assistant', resultMessage.content);
+          
+          toast({ title: "Navegando", description: routeLabels[route] });
+          
+          if (voiceEnabled) {
+            speakText(`Abrindo ${routeLabels[route]}`);
+          }
+          
+          setIsExecutingAction(false);
+          setPendingAction(null);
+          return;
+        }
+      }
+      
       const response = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${SUPABASE_KEY}`,
         },
-        body: JSON.stringify({ executeAction: action }),
+        body: JSON.stringify({ executeAction: action, userId }),
       });
 
       const data = await response.json();
@@ -520,7 +579,7 @@ export default function AIAssistant() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${SUPABASE_KEY}`,
         },
-        body: JSON.stringify({ messages: allMessages }),
+        body: JSON.stringify({ messages: allMessages, userId, voiceInput: isListening }),
       });
 
       if (!response.ok) {
@@ -694,20 +753,27 @@ export default function AIAssistant() {
   };
 
   return (
-    <AdminLayout title="Assistente IA">
+    <AdminLayout title="Assistente IA 24h">
       <div className="flex flex-col h-[calc(100vh-180px)] max-w-5xl mx-auto">
         {/* Header with quick stats */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center relative">
               <Sparkles className="w-5 h-5 text-primary-foreground" />
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse" />
             </div>
             <div>
-              <h2 className="font-semibold text-foreground">Assistente Inteligente</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold text-foreground">Assistente Superinteligente</h2>
+                <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-600">
+                  <Zap className="w-3 h-3 mr-1" />
+                  24h ATIVO
+                </Badge>
+              </div>
               <p className="text-xs text-muted-foreground">
-                Pergunte ou peça ações
+                Comandos de voz e ações executáveis
                 {voiceSupported && ' • 🎤 Voz'}
-                {ttsSupported && ' • 🔊 Leitura'}
+                {ttsSupported && ' • 🔊 TTS'}
                 {userId && ' • 💾 Salvo'}
               </p>
             </div>

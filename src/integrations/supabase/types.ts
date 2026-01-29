@@ -38,6 +38,128 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_command_logs: {
+        Row: {
+          command_id: string | null
+          created_at: string
+          error_message: string | null
+          execution_result: Json | null
+          execution_time_ms: number | null
+          id: string
+          params_extracted: Json | null
+          raw_input: string
+          recognized_action: string | null
+          success: boolean | null
+          user_id: string | null
+          voice_input: boolean | null
+        }
+        Insert: {
+          command_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          execution_result?: Json | null
+          execution_time_ms?: number | null
+          id?: string
+          params_extracted?: Json | null
+          raw_input: string
+          recognized_action?: string | null
+          success?: boolean | null
+          user_id?: string | null
+          voice_input?: boolean | null
+        }
+        Update: {
+          command_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          execution_result?: Json | null
+          execution_time_ms?: number | null
+          id?: string
+          params_extracted?: Json | null
+          raw_input?: string
+          recognized_action?: string | null
+          success?: boolean | null
+          user_id?: string | null
+          voice_input?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_command_logs_command_id_fkey"
+            columns: ["command_id"]
+            isOneToOne: false
+            referencedRelation: "ai_commands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_commands: {
+        Row: {
+          action_type: string | null
+          command_pattern: string
+          command_type: string
+          created_at: string
+          description: string
+          example_phrases: string[]
+          id: string
+          is_active: boolean
+          params_schema: Json | null
+          requires_confirmation: boolean
+          updated_at: string
+        }
+        Insert: {
+          action_type?: string | null
+          command_pattern: string
+          command_type?: string
+          created_at?: string
+          description: string
+          example_phrases?: string[]
+          id?: string
+          is_active?: boolean
+          params_schema?: Json | null
+          requires_confirmation?: boolean
+          updated_at?: string
+        }
+        Update: {
+          action_type?: string | null
+          command_pattern?: string
+          command_type?: string
+          created_at?: string
+          description?: string
+          example_phrases?: string[]
+          id?: string
+          is_active?: boolean
+          params_schema?: Json | null
+          requires_confirmation?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ai_settings: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string
+          value?: Json
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       ai_whatsapp_logs: {
         Row: {
           created_at: string
@@ -933,6 +1055,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      system_documentation: {
+        Row: {
+          code_examples: string | null
+          content: string
+          created_at: string
+          id: string
+          is_active: boolean
+          module_name: string
+          order_index: number | null
+          section_title: string
+          updated_at: string
+        }
+        Insert: {
+          code_examples?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          module_name: string
+          order_index?: number | null
+          section_title: string
+          updated_at?: string
+        }
+        Update: {
+          code_examples?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          module_name?: string
+          order_index?: number | null
+          section_title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {

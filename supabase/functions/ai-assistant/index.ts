@@ -16,12 +16,26 @@ interface SystemStats {
   activeFrentistas: number;
   totalPremios: number;
   recentLogs: string[];
+  aiCommands: Array<{ pattern: string; description: string; examples: string[] }>;
 }
 
 interface ActionRequest {
-  type: 'create_promotion' | 'create_campaign' | 'send_campaign' | 'create_raffle' | 'resolve_complaint';
+  type: 'create_promotion' | 'create_campaign' | 'send_campaign' | 'create_raffle' | 'resolve_complaint' | 'navigate' | 'update_settings';
   params: Record<string, unknown>;
   description: string;
+}
+
+interface CommandLog {
+  user_id?: string;
+  command_id?: string;
+  raw_input: string;
+  recognized_action?: string;
+  params_extracted?: Record<string, unknown>;
+  execution_result?: Record<string, unknown>;
+  success?: boolean;
+  error_message?: string;
+  execution_time_ms?: number;
+  voice_input?: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,6 +53,7 @@ async function getSystemStats(supabase: any): Promise<SystemStats> {
     frentistasResult,
     premiosResult,
     logsResult,
+    commandsResult,
   ] = await Promise.all([
     supabase.from('wa_contacts').select('id', { count: 'exact', head: true }),
     supabase.from('checkins').select('id', { count: 'exact', head: true }).gte('created_at', today),
@@ -49,11 +64,18 @@ async function getSystemStats(supabase: any): Promise<SystemStats> {
     supabase.from('frentistas').select('id', { count: 'exact', head: true }).eq('is_active', true),
     supabase.from('premios_qr').select('id', { count: 'exact', head: true }).eq('status', 'ativo'),
     supabase.from('whatsapp_logs').select('phone, status, error, created_at').order('created_at', { ascending: false }).limit(10),
+    supabase.from('ai_commands').select('command_pattern, description, example_phrases').eq('is_active', true).order('command_type'),
   ]);
 
   const recentLogs = (logsResult.data || []).map((log: { created_at: string; phone: string; status: string; error?: string }) => 
     `${log.created_at}: ${log.phone} - ${log.status}${log.error ? ` (${log.error})` : ''}`
   );
+
+  const aiCommands = (commandsResult.data || []).map((cmd: { command_pattern: string; description: string; example_phrases: string[] }) => ({
+    pattern: cmd.command_pattern,
+    description: cmd.description,
+    examples: cmd.example_phrases || [],
+  }));
 
   return {
     totalContacts: contactsResult.count || 0,
@@ -65,14 +87,27 @@ async function getSystemStats(supabase: any): Promise<SystemStats> {
     activeFrentistas: frentistasResult.count || 0,
     totalPremios: premiosResult.count || 0,
     recentLogs,
+    aiCommands,
   };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function executeAction(supabase: any, action: ActionRequest): Promise<{ success: boolean; message: string; data?: unknown }> {
+async function logCommand(supabase: any, log: CommandLog): Promise<void> {
+  try {
+    await supabase.from('ai_command_logs').insert(log);
+  } catch (error) {
+    console.error("[ai-assistant] Failed to log command:", error);
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function executeAction(supabase: any, action: ActionRequest, userId?: string): Promise<{ success: boolean; message: string; data?: unknown }> {
+  const startTime = Date.now();
   console.log("[ai-assistant] Executing action:", action.type, action.params);
   
   try {
+    let result: { success: boolean; message: string; data?: unknown };
+    
     switch (action.type) {
       case 'create_promotion': {
         const { title, description, discount_value, start_date, end_date, type } = action.params as {
@@ -85,10 +120,10 @@ async function executeAction(supabase: any, action: ActionRequest): Promise<{ su
         };
         
         if (!title) {
-          return { success: false, message: "Título da promoção é obrigatório" };
+          result = { success: false, message: "Título da promoção é obrigatório" };
+          break;
         }
         
-        // Allowed types: 'desconto', 'brinde', 'informativa', 'relampago'
         const validTypes = ['desconto', 'brinde', 'informativa', 'relampago'];
         const safeType = type && validTypes.includes(type) ? type : 'desconto';
         
@@ -103,7 +138,8 @@ async function executeAction(supabase: any, action: ActionRequest): Promise<{ su
         }).select().single();
         
         if (error) throw error;
-        return { success: true, message: `Promoção "${title}" criada com sucesso! Tipo: ${safeType}${discount_value ? `, Desconto: ${discount_value}%` : ''}`, data };
+        result = { success: true, message: `Promoção "${title}" criada com sucesso! Tipo: ${safeType}${discount_value ? `, Desconto: ${discount_value}%` : ''}`, data };
+        break;
       }
       
       case 'create_campaign': {
@@ -114,10 +150,10 @@ async function executeAction(supabase: any, action: ActionRequest): Promise<{ su
         };
         
         if (!name || !message) {
-          return { success: false, message: "Nome e mensagem da campanha são obrigatórios" };
+          result = { success: false, message: "Nome e mensagem da campanha são obrigatórios" };
+          break;
         }
         
-        // Get count of eligible contacts
         const { count } = await supabase
           .from('wa_contacts')
           .select('id', { count: 'exact', head: true })
@@ -132,17 +168,18 @@ async function executeAction(supabase: any, action: ActionRequest): Promise<{ su
         }).select().single();
         
         if (error) throw error;
-        return { success: true, message: `Campanha "${name}" criada com ${count || 0} destinatários potenciais! Status: rascunho (aguardando disparo)`, data };
+        result = { success: true, message: `Campanha "${name}" criada com ${count || 0} destinatários potenciais! Status: rascunho (aguardando disparo)`, data };
+        break;
       }
       
       case 'send_campaign': {
         const { campaign_id } = action.params as { campaign_id: string };
         
         if (!campaign_id) {
-          return { success: false, message: "ID da campanha é obrigatório" };
+          result = { success: false, message: "ID da campanha é obrigatório" };
+          break;
         }
         
-        // Update campaign status to 'scheduled'
         const { data, error } = await supabase
           .from('whatsapp_campaigns')
           .update({ status: 'scheduled', scheduled_at: new Date().toISOString() })
@@ -151,7 +188,8 @@ async function executeAction(supabase: any, action: ActionRequest): Promise<{ su
           .single();
         
         if (error) throw error;
-        return { success: true, message: `Campanha agendada para disparo! O worker processará em breve.`, data };
+        result = { success: true, message: `Campanha agendada para disparo! O worker processará em breve.`, data };
+        break;
       }
       
       case 'create_raffle': {
@@ -163,7 +201,8 @@ async function executeAction(supabase: any, action: ActionRequest): Promise<{ su
         };
         
         if (!name) {
-          return { success: false, message: "Nome do sorteio é obrigatório" };
+          result = { success: false, message: "Nome do sorteio é obrigatório" };
+          break;
         }
         
         const { data, error } = await supabase.from('raffles').insert({
@@ -175,7 +214,8 @@ async function executeAction(supabase: any, action: ActionRequest): Promise<{ su
         }).select().single();
         
         if (error) throw error;
-        return { success: true, message: `Sorteio "${name}" criado com prêmio de R$${prize_value || 100} para ${winners_count || 3} ganhadores!`, data };
+        result = { success: true, message: `Sorteio "${name}" criado com prêmio de R$${prize_value || 100} para ${winners_count || 3} ganhadores!`, data };
+        break;
       }
       
       case 'resolve_complaint': {
@@ -185,7 +225,8 @@ async function executeAction(supabase: any, action: ActionRequest): Promise<{ su
         };
         
         if (!complaint_id) {
-          return { success: false, message: "ID da reclamação é obrigatório" };
+          result = { success: false, message: "ID da reclamação é obrigatório" };
+          break;
         }
         
         const { data, error } = await supabase
@@ -200,55 +241,92 @@ async function executeAction(supabase: any, action: ActionRequest): Promise<{ su
           .single();
         
         if (error) throw error;
-        return { success: true, message: `Reclamação marcada como resolvida!`, data };
+        result = { success: true, message: `Reclamação marcada como resolvida!`, data };
+        break;
+      }
+      
+      case 'navigate': {
+        const { route } = action.params as { route: string };
+        result = { success: true, message: `Navegando para ${route}`, data: { route } };
+        break;
+      }
+      
+      case 'update_settings': {
+        const { key, value } = action.params as { key: string; value: unknown };
+        
+        if (!key) {
+          result = { success: false, message: "Chave da configuração é obrigatória" };
+          break;
+        }
+        
+        const { data, error } = await supabase
+          .from('ai_settings')
+          .upsert({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() }, { onConflict: 'key' })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        result = { success: true, message: `Configuração "${key}" atualizada!`, data };
+        break;
       }
       
       default:
-        return { success: false, message: `Ação desconhecida: ${action.type}` };
+        result = { success: false, message: `Ação desconhecida: ${action.type}` };
     }
+    
+    // Log the command execution
+    await logCommand(supabase, {
+      user_id: userId,
+      raw_input: action.description,
+      recognized_action: action.type,
+      params_extracted: action.params,
+      execution_result: result,
+      success: result.success,
+      error_message: result.success ? undefined : result.message,
+      execution_time_ms: Date.now() - startTime,
+      voice_input: false,
+    });
+    
+    return result;
   } catch (error) {
     console.error("[ai-assistant] Action error:", error);
     const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+    
+    await logCommand(supabase, {
+      user_id: userId,
+      raw_input: action.description,
+      recognized_action: action.type,
+      params_extracted: action.params,
+      success: false,
+      error_message: errorMessage,
+      execution_time_ms: Date.now() - startTime,
+    });
+    
     return { success: false, message: `Erro ao executar ação: ${errorMessage}` };
   }
 }
 
 function buildSystemPrompt(stats: SystemStats): string {
-  return `Você é o **Assistente IA do Sistema Posto 7**, um sistema completo de gestão para postos de combustível.
+  const commandsList = stats.aiCommands.map(cmd => 
+    `- **${cmd.pattern}**: ${cmd.description}\n  Exemplos: "${cmd.examples.slice(0, 2).join('", "')}"`
+  ).join('\n');
+
+  return `Você é o **Assistente IA Superinteligente do Sistema Posto 7**, funcionando 24 horas por dia, 7 dias por semana.
 
 ## Sua Personalidade
-- Seja profissional, direto e prestativo
+- Seja profissional, direto e extremamente prestativo
 - Responda sempre em português brasileiro
 - Use formatação Markdown para melhor legibilidade
-- Quando não souber algo específico, seja honesto
+- Você é capaz de EXECUTAR AÇÕES no sistema, não apenas informar
 
-## Conhecimento do Sistema
+## 🧠 MODO SUPERINTELIGENTE ATIVO
 
-### Módulos Disponíveis:
-1. **Captura de Clientes**: Cadastro via QR Code, check-ins de abastecimento
-2. **Frentistas/Stone**: Integração TEF, controle de metas
-3. **Sorteios**: Sistema de sorteios automáticos para clientes
-4. **Promoções**: Gerenciamento de promoções e descontos
-5. **WhatsApp**: Campanhas em massa, chatbot, envio automático
-6. **Livro Caixa**: Controle financeiro de entradas/saídas
-7. **QR Premiação**: Prêmios com QR Code para clientes
-8. **Relatórios**: Produção, frentistas, vendas
+Você opera em modo superinteligente com as seguintes capacidades:
 
-### Estrutura do Banco de Dados:
-- **wa_contacts**: Contatos WhatsApp (phone, name, opt_in, flow_state)
-- **checkins**: Registros de abastecimento (phone, amount, liters, attendant_code, tag)
-- **frentistas**: Funcionários do posto (nome, codigo, terminal_id)
-- **whatsapp_campaigns**: Campanhas de disparo em massa
-- **whatsapp_campaign_recipients**: Destinatários das campanhas
-- **raffles**: Configuração de sorteios
-- **raffle_runs**: Execuções de sorteios
-- **promotions**: Promoções ativas
-- **premios_qr**: Prêmios QR com saldo
-- **complaints**: Reclamações de clientes
-- **livro_caixa**: Registros financeiros
-- **stone_tef_logs**: Logs de transações TEF
+### 1. Comandos de Voz/Texto Reconhecidos:
+${commandsList}
 
-### Dados Atuais do Sistema:
+### 2. Dados em Tempo Real:
 - 📱 Contatos cadastrados: **${stats.totalContacts}**
 - ⛽ Check-ins hoje: **${stats.todayCheckins}**
 - 📊 Check-ins no mês: **${stats.monthCheckins}**
@@ -258,66 +336,70 @@ function buildSystemPrompt(stats: SystemStats): string {
 - 👷 Frentistas ativos: **${stats.activeFrentistas}**
 - 🎁 Prêmios QR ativos: **${stats.totalPremios}**
 
-### Logs Recentes de WhatsApp:
-${stats.recentLogs.length > 0 ? stats.recentLogs.join('\n') : 'Nenhum log recente disponível.'}
+### 3. Ações Executáveis via Voz:
 
-## 🚀 AÇÕES EXECUTÁVEIS (NOVO!)
-
-Você PODE executar ações no sistema! Quando o usuário pedir para criar/disparar algo, você deve responder com um bloco de ação especial.
-
-### Ações Disponíveis:
-
-1. **Criar Promoção** - \`create_promotion\`
-   Parâmetros: title (obrigatório), description, discount_value, start_date, end_date
-   Tipos válidos para 'type': desconto, brinde, informativa, relampago (padrão: desconto)
-
-2. **Criar Campanha WhatsApp** - \`create_campaign\`
-   Parâmetros: name (obrigatório), message (obrigatório), template_name
-
-3. **Disparar Campanha** - \`send_campaign\`
-   Parâmetros: campaign_id (obrigatório)
-
-4. **Criar Sorteio** - \`create_raffle\`
-   Parâmetros: name (obrigatório), prize_value, winners_count, rules
-
-5. **Resolver Reclamação** - \`resolve_complaint\`
-   Parâmetros: complaint_id (obrigatório), resolution_notes
-
-### Como Propor Ações:
-
-Quando o usuário pedir uma ação, responda incluindo um bloco JSON especial no formato:
+Quando o usuário pedir uma ação, SEMPRE responda com um bloco de ação:
 
 \`\`\`action
 {
   "type": "create_promotion",
-  "params": {
-    "title": "Promoção de Verão",
-    "description": "10% de desconto no Pix",
-    "discount_value": 10,
-    "type": "desconto"
-  },
-  "description": "Criar promoção de verão com 10% de desconto"
+  "params": { "title": "Nome", "discount_value": 10, "type": "desconto" },
+  "description": "Criar promoção com 10% de desconto"
 }
 \`\`\`
 
-O sistema irá detectar esse bloco e mostrar um botão de confirmação para o usuário antes de executar.
+### 4. Tipos de Ação Disponíveis:
+- **create_promotion**: title, description, discount_value, type (desconto/brinde/informativa/relampago)
+- **create_campaign**: name, message, template_name
+- **send_campaign**: campaign_id
+- **create_raffle**: name, prize_value, winners_count, rules
+- **resolve_complaint**: complaint_id, resolution_notes
+- **navigate**: route (para navegação)
+- **update_settings**: key, value
 
-### Exemplos de Pedidos:
+### 5. Navegação por Voz:
+Quando o usuário pedir para "ir para" ou "abrir" algo, use:
+\`\`\`action
+{
+  "type": "navigate",
+  "params": { "route": "/admin/captura" },
+  "description": "Ir para tela de captura"
+}
+\`\`\`
 
-- "Crie uma promoção de 5% de desconto no Pix" → Proponha create_promotion
-- "Faça uma campanha de WhatsApp avisando sobre a nova promoção" → Proponha create_campaign
-- "Crie um sorteio de R$200 para 5 ganhadores" → Proponha create_raffle
+Rotas disponíveis:
+- /admin/captura - Cadastros
+- /admin/producao - Check-ins
+- /admin/sorteios - Sorteios
+- /admin/promocoes - Promoções
+- /admin/whatsapp - Robô WhatsApp
+- /admin/robo-whatsapp - Configurações WhatsApp
+- /admin/atendimento - Reclamações
+- /admin/livro-caixa - Financeiro
+- /admin/qr-code - Gerador QR
+- /admin/frentista - Frentistas
+- /admin/configuracoes - Configurações
+- /admin/manual - Manual/Documentação
 
-## Capacidades Atualizadas:
-- ✅ Responder perguntas sobre o funcionamento do sistema
-- ✅ Explicar como usar cada módulo
-- ✅ Analisar dados e fornecer insights
-- ✅ **EXECUTAR AÇÕES** com confirmação do usuário
-- ✅ Criar promoções, campanhas, sorteios
-- ✅ Resolver reclamações
-- ✅ Ajudar a criar consultas SQL para análises
+### 6. Logs Recentes de WhatsApp:
+${stats.recentLogs.length > 0 ? stats.recentLogs.slice(0, 5).join('\n') : 'Nenhum log recente.'}
 
-Sempre explique o que a ação vai fazer antes de propor, e inclua o bloco \`\`\`action para que o sistema mostre a confirmação.`;
+## 🚀 REGRAS DE OPERAÇÃO 24H
+
+1. **Sempre Ativo**: Responda imediatamente a qualquer comando
+2. **Confirmação**: Ações destrutivas requerem confirmação do usuário
+3. **Contexto**: Lembre-se do contexto da conversa
+4. **Proatividade**: Sugira ações quando detectar problemas
+5. **Voz**: Otimize respostas para leitura por TTS
+
+## Como Responder:
+
+1. Para CONSULTAS: Responda diretamente com as informações
+2. Para AÇÕES: Sempre inclua o bloco \`\`\`action com os parâmetros
+3. Para NAVEGAÇÃO: Use o bloco action com type "navigate"
+4. Para PROBLEMAS: Sugira soluções proativamente
+
+Você está pronto para executar qualquer comando. Aguardando instruções!`;
 }
 
 serve(async (req) => {
@@ -326,7 +408,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, executeAction: actionToExecute } = await req.json();
+    const { messages, executeAction: actionToExecute, userId, voiceInput } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -340,12 +422,24 @@ serve(async (req) => {
     // If an action is being executed, handle it
     if (actionToExecute) {
       console.log("[ai-assistant] Action execution requested:", actionToExecute);
-      const result = await executeAction(supabase, actionToExecute as ActionRequest);
+      const result = await executeAction(supabase, actionToExecute as ActionRequest, userId);
       
       return new Response(
         JSON.stringify({ actionResult: result }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Log the incoming message if it's a voice input
+    if (voiceInput && messages && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === 'user') {
+        await logCommand(supabase, {
+          user_id: userId,
+          raw_input: lastMessage.content,
+          voice_input: true,
+        });
+      }
     }
 
     // Get real-time stats from the database
