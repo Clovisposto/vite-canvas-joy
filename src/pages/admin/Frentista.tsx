@@ -52,7 +52,6 @@ interface Checkin {
   phone: string;
   amount: number | null;
   created_at: string;
-  customers: { name: string | null } | null;
 }
 
 interface ImportResult {
@@ -396,12 +395,12 @@ export default function AdminFrentista() {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { data } = await supabase
       .from('checkins')
-      .select('id, phone, amount, created_at, customers(name)')
+      .select('id, phone, amount, created_at')
       .gte('created_at', oneHourAgo)
       .is('stone_tef_id', null)
       .order('created_at', { ascending: false })
       .limit(20);
-    setRecentCheckins((data as Checkin[]) || []);
+    setRecentCheckins((data as unknown as Checkin[]) || []);
   };
 
   const handleSubmit = async () => {
@@ -1572,7 +1571,7 @@ export default function AdminFrentista() {
                 <div className="flex items-center gap-3">
                   <Fuel className="w-5 h-5 text-primary" />
                   <div className="text-left">
-                    <p className="font-medium">{checkin.customers?.name || checkin.phone}</p>
+                    <p className="font-medium">{checkin.phone}</p>
                     <p className="text-xs text-muted-foreground">
                       {format(new Date(checkin.created_at), 'HH:mm', { locale: ptBR })} • 
                       {checkin.amount ? ` R$ ${checkin.amount}` : ' Valor não informado'}

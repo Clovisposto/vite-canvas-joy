@@ -928,19 +928,19 @@ export default function RoboWhatsapp() {
     setLoadingCustomers(true);
     setSelectedCustomers(new Set());
     try {
-      // Buscar clientes - com ou sem filtro de opt-in
+      // Buscar contatos - com ou sem filtro de opt-in
       let query = supabase
-        .from('customers')
-        .select('phone, name, accepts_promo, lgpd_consent');
+        .from('wa_contacts')
+        .select('phone, name, opt_in');
       
       // Se não mostrar todos, filtrar apenas com opt-in
       if (!showAllCustomers) {
-        query = query.eq('accepts_promo', true).eq('lgpd_consent', true);
+        query = query.eq('opt_in', true);
       }
       
-      const { data: customers, error: customersError } = await query;
+      const { data: contactsData, error: contactsError } = await query;
       
-      if (customersError) throw customersError;
+      if (contactsError) throw contactsError;
 
       // Buscar opt-outs
       const { data: optouts } = await supabase
@@ -961,7 +961,7 @@ export default function RoboWhatsapp() {
       const eligible: EligibleCustomer[] = [];
       const seenPhones = new Set<string>();
       
-      (customers || []).forEach(c => {
+      (contactsData || []).forEach(c => {
         const normalized = normalizePhoneE164(c.phone);
         // Usar validação robusta ao invés de apenas comprimento
         if (
@@ -975,8 +975,8 @@ export default function RoboWhatsapp() {
             phone: c.phone,
             phone_e164: normalized,
             name: c.name,
-            accepts_promo: c.accepts_promo ?? false,
-            lgpd_consent: c.lgpd_consent ?? false
+            accepts_promo: c.opt_in ?? false,
+            lgpd_consent: c.opt_in ?? false
           });
         }
       });

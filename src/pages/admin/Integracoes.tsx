@@ -121,14 +121,14 @@ export default function AdminIntegracoes() {
 
         const { phone, amount, liters } = validation;
 
-        // Find customer by phone
-        const { data: customer } = await supabase
-          .from('customers')
+        // Find contact by phone in wa_contacts
+        const { data: contact } = await supabase
+          .from('wa_contacts')
           .select('id')
           .eq('phone', phone)
-          .single();
+          .maybeSingle();
 
-        if (customer) {
+        if (contact) {
           const updateData: { amount?: number; liters?: number } = {};
           if (amount !== undefined) updateData.amount = amount;
           if (liters !== undefined) updateData.liters = liters;
@@ -137,11 +137,11 @@ export default function AdminIntegracoes() {
             await supabase
               .from('checkins')
               .update(updateData)
-              .eq('customer_id', customer.id);
+              .eq('phone', phone);
             matched++;
           }
         } else {
-          importErrors.push({ line: lineNumber, message: `Cliente não encontrado: ${phone}` });
+          importErrors.push({ line: lineNumber, message: `Contato não encontrado: ${phone}` });
           skipped++;
         }
       }

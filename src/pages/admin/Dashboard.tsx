@@ -123,8 +123,8 @@ export default function AdminDashboard() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const [customers, checkins, promos, complaints, demoCheckins] = await Promise.all([
-        supabase.from('customers').select('id', { count: 'exact', head: true }),
+      const [contacts, checkins, promos, complaints, demoCheckins] = await Promise.all([
+        supabase.from('wa_contacts').select('id', { count: 'exact', head: true }),
         supabase.from('checkins').select('id, is_demo', { count: 'exact' }).gte('created_at', today.toISOString()),
         supabase.from('promotions').select('id', { count: 'exact', head: true }).eq('is_active', true),
         supabase.from('complaints').select('id', { count: 'exact', head: true }).eq('status', 'novo'),
@@ -135,7 +135,7 @@ export default function AdminDashboard() {
       const hasRealData = realCheckins > 0;
 
       setStats({
-        totalCustomers: customers.count || 0,
+        totalCustomers: contacts.count || 0,
         todayCheckins: hasRealData ? realCheckins : (checkins.count || 0),
         activePromos: promos.count || 0,
         pendingComplaints: complaints.count || 0,
