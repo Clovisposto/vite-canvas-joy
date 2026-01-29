@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -30,14 +30,14 @@ export interface CustomerData {
 }
 
 export default function CustomerApp() {
-  console.log('CustomerApp: componente montando');
-  
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
-  const [step, setStep] = useState(1); // 1 = Captura, 2 = Confirmação, 3 = Agradecimento
+  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [initError, setInitError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   // Função para formatar telefone para exibição
   const formatPhoneForDisplay = (phone: string | null): string => {
@@ -64,39 +64,69 @@ export default function CustomerApp() {
   });
 
   useEffect(() => {
-    console.log('CustomerApp: useEffect iniciando fetchSettings');
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
-    console.log('CustomerApp: fetchSettings iniciando');
-    try {
-      const { data, error } = await supabase.from('settings').select('*');
-      console.log('CustomerApp: fetchSettings resultado', { data, error });
-      
-      if (error) {
-        console.error('CustomerApp: Erro ao buscar settings', error);
-        setInitError(`Erro Supabase: ${error.message}`);
-        return;
-      }
-      
-      if (data) {
-        const settingsMap: Record<string, any> = {};
-        data.forEach((s: any) => {
-          try {
-            settingsMap[s.key] = typeof s.value === 'string' ? JSON.parse(s.value) : s.value;
-          } catch {
-            settingsMap[s.key] = s.value;
-          }
-        });
-        console.log('CustomerApp: settings carregadas', settingsMap);
-        setSettings(settingsMap);
-      }
-    } catch (err) {
-      console.error('CustomerApp: Exceção em fetchSettings', err);
-      setInitError(`Exceção: ${err instanceof Error ? err.message : String(err)}`);
+    // Abortar qualquer requisição anterior
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
-  };
+    
+    // Criar novo AbortController
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+    
+    const fetchSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('settings')
+          .select('*')
+          .abortSignal(signal);
+        
+        // Se foi abortado, não atualizar estado
+        if (signal.aborted) return;
+        
+        if (error) {
+          console.error('CustomerApp: Erro ao buscar settings', error);
+          // Não mostrar erro se foi abort - é esperado em remontagens
+          if (error.message?.includes('abort')) {
+            return;
+          }
+          setInitError(`Erro ao carregar: ${error.message}`);
+          return;
+        }
+        
+        if (data) {
+          const settingsMap: Record<string, any> = {};
+          data.forEach((s: any) => {
+            try {
+              settingsMap[s.key] = typeof s.value === 'string' ? JSON.parse(s.value) : s.value;
+            } catch {
+              settingsMap[s.key] = s.value;
+            }
+          });
+          setSettings(settingsMap);
+        }
+      } catch (err: any) {
+        // Ignorar erros de abort
+        if (err?.name === 'AbortError' || signal.aborted) {
+          return;
+        }
+        console.error('CustomerApp: Exceção em fetchSettings', err);
+        setInitError(`Erro de conexão. Tente novamente.`);
+      } finally {
+        if (!signal.aborted) {
+          setIsInitializing(false);
+        }
+      }
+    };
+    
+    fetchSettings();
+    
+    // Cleanup: abortar requisição ao desmontar
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -116,24 +146,8 @@ export default function CustomerApp() {
     
     // Não adicionar 55 duas vezes
     const phoneE164 = phoneDigits.startsWith('55') ? phoneDigits : ('55' + phoneDigits);
-
-    // NEW: espelha lead no Neon/Vercel Postgres (não bloqueia fluxo atual)
-    fetch("/api/leads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        phone: phoneE164,
-        acceptsPromo: customerData.acceptsPromo,
-        acceptsRaffle: customerData.acceptsRaffle,
-        consent: customerData.lgpdConsent,
-        tag: customerData.tag,
-        attendantCode: customerData.attendantCode,
-        source: "pwa"
-      })
-    }).catch(()=>{});
     
     const now = new Date();
-    const consentVersion = `lgpd-v1-${now.toISOString().split('T')[0]}`;
     const consentTimestamp = now.toISOString();
 
     let finalAttendantCode = customerData.attendantCode;
@@ -145,7 +159,7 @@ export default function CustomerApp() {
           .select('terminal_id, frentista_id, frentistas(codigo)')
           .eq('tag', customerData.tag)
           .eq('is_active', true)
-          .single();
+          .maybeSingle();
 
         if (capturePoint) {
           if (capturePoint.frentista_id && capturePoint.frentistas) {
@@ -160,7 +174,7 @@ export default function CustomerApp() {
               .gte('horario', thirtyMinutesAgo)
               .order('horario', { ascending: false })
               .limit(1)
-              .single();
+              .maybeSingle();
 
             if (stoneTransaction?.frentista_id) {
               finalAttendantCode = stoneTransaction.frentista_id;
@@ -201,23 +215,7 @@ export default function CustomerApp() {
         throw rpcError || new Error('Erro ao criar checkin');
       }
 
-      
-      // Mirror capture into Vercel Postgres (non-blocking)
-      fetch('/api/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: phoneE164,
-          name: customerData.name?.trim() || null,
-          acceptsPromo: customerData.acceptsPromo,
-          acceptsRaffle: customerData.acceptsRaffle,
-          consent: customerData.lgpdConsent,
-          tag: customerData.tag,
-          attendantCode: finalAttendantCode
-        })
-      }).catch(() => {});
-
-console.log('PWA cadastro sucesso', { phoneE164, attendantCode: finalAttendantCode });
+      console.log('PWA cadastro sucesso', { phoneE164, attendantCode: finalAttendantCode });
 
       // Send WhatsApp confirmation (fire and forget)
       supabase.functions.invoke('raffle-confirmation', {
@@ -255,7 +253,24 @@ console.log('PWA cadastro sucesso', { phoneE164, attendantCode: finalAttendantCo
     setStep(1);
   }, []);
 
-  console.log('CustomerApp: renderizando, step =', step, 'initError =', initError);
+  const handleRetry = useCallback(() => {
+    setInitError(null);
+    setIsInitializing(true);
+    // Forçar remontagem do useEffect
+    window.location.reload();
+  }, []);
+
+  // Loading state
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-primary flex items-center justify-center p-6">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-white/80 text-sm">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Mostrar erro de inicialização se houver
   if (initError) {
@@ -265,7 +280,7 @@ console.log('PWA cadastro sucesso', { phoneE164, attendantCode: finalAttendantCo
           <h1 className="text-xl font-bold text-red-600 mb-4">Erro de Conexão</h1>
           <p className="text-gray-600 mb-4">{initError}</p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={handleRetry}
             className="bg-primary text-white py-2 px-6 rounded hover:bg-primary/90"
           >
             Tentar novamente
