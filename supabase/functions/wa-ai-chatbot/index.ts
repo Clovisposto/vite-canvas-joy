@@ -168,6 +168,18 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Safe string conversion for error messages
+function safeErrorString(error: unknown, maxLength: number = 500): string | null {
+  if (error === null || error === undefined) return null;
+  if (typeof error === 'string') return error.substring(0, maxLength);
+  if (error instanceof Error) return error.message.substring(0, maxLength);
+  try {
+    return JSON.stringify(error).substring(0, maxLength);
+  } catch {
+    return String(error).substring(0, maxLength);
+  }
+}
+
 // Send message via Evolution API with robust retry logic
 async function sendWhatsAppMessageWithRetry(
   phone: string, 
@@ -449,7 +461,7 @@ serve(async (req) => {
         message_type: "text",
         content: farewellMessage.substring(0, 500),
         status: sendResult.success ? "sent" : "failed",
-        error_message: sendResult.error?.substring(0, 500),
+        error_message: safeErrorString(sendResult.error, 500),
         provider: "evolution"
       });
 
@@ -459,7 +471,7 @@ serve(async (req) => {
         message: farewellMessage.substring(0, 500),
         provider: "AI_CHATBOT",
         status: sendResult.success ? "SENT" : "FAILED",
-        error: sendResult.success ? null : `Chatbot error: ${sendResult.error?.substring(0, 200) || 'Unknown'}`,
+        error: sendResult.success ? null : `Chatbot error: ${safeErrorString(sendResult.error, 200) || 'Unknown'}`,
         message_id: sendResult.messageId
       });
       
@@ -509,7 +521,7 @@ serve(async (req) => {
         message_type: "text",
         content: welcomeMessage.substring(0, 500),
         status: sendResult.success ? "sent" : "failed",
-        error_message: sendResult.error?.substring(0, 500),
+        error_message: safeErrorString(sendResult.error, 500),
         provider: "evolution",
         wa_message_id: sendResult.messageId
       });
@@ -520,7 +532,7 @@ serve(async (req) => {
         message: welcomeMessage.substring(0, 500),
         provider: "AI_CHATBOT",
         status: sendResult.success ? "SENT" : "FAILED",
-        error: sendResult.success ? null : `Chatbot error: ${sendResult.error?.substring(0, 200) || 'Unknown'}`,
+        error: sendResult.success ? null : `Chatbot error: ${safeErrorString(sendResult.error, 200) || 'Unknown'}`,
         message_id: sendResult.messageId
       });
       
@@ -597,7 +609,7 @@ serve(async (req) => {
           message_type: "text",
           content: aiResponse.substring(0, 500),
           status: sendResult.success ? "sent" : "failed",
-          error_message: sendResult.error?.substring(0, 500),
+          error_message: safeErrorString(sendResult.error, 500),
           provider: "evolution"
         });
 
@@ -607,7 +619,7 @@ serve(async (req) => {
           message: aiResponse.substring(0, 500),
           provider: "AI_CHATBOT",
           status: sendResult.success ? "SENT" : "FAILED",
-          error: sendResult.success ? null : `Chatbot error: ${sendResult.error?.substring(0, 200) || 'Unknown'}`,
+          error: sendResult.success ? null : `Chatbot error: ${safeErrorString(sendResult.error, 200) || 'Unknown'}`,
           message_id: sendResult.messageId
         });
 
@@ -624,7 +636,7 @@ serve(async (req) => {
           message_type: "text",
           content: aiResponse.substring(0, 500),
           status: sendResult.success ? "sent" : "failed",
-          error_message: sendResult.error?.substring(0, 500),
+          error_message: safeErrorString(sendResult.error, 500),
           provider: "evolution"
         });
 
@@ -634,7 +646,7 @@ serve(async (req) => {
           message: aiResponse.substring(0, 500),
           provider: "AI_CHATBOT",
           status: sendResult.success ? "SENT" : "FAILED",
-          error: sendResult.success ? null : `Chatbot error: ${sendResult.error?.substring(0, 200) || 'Unknown'}`,
+          error: sendResult.success ? null : `Chatbot error: ${safeErrorString(sendResult.error, 200) || 'Unknown'}`,
           message_id: sendResult.messageId
         });
 
@@ -675,7 +687,7 @@ serve(async (req) => {
         message_type: "text",
         content: finalResponse.substring(0, 500),
         status: sendResult.success ? "sent" : "failed",
-        error_message: sendResult.error?.substring(0, 500),
+        error_message: safeErrorString(sendResult.error, 500),
         provider: "evolution"
       });
 
@@ -685,7 +697,7 @@ serve(async (req) => {
         message: finalResponse.substring(0, 500),
         provider: "AI_CHATBOT",
         status: sendResult.success ? "SENT" : "FAILED",
-        error: sendResult.success ? null : `Chatbot error: ${sendResult.error?.substring(0, 200) || 'Unknown'}`,
+        error: sendResult.success ? null : `Chatbot error: ${safeErrorString(sendResult.error, 200) || 'Unknown'}`,
         message_id: sendResult.messageId
       });
 
