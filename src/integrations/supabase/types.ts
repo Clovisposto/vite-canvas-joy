@@ -134,6 +134,38 @@ export type Database = {
         }
         Relationships: []
       }
+      checkin_public_links: {
+        Row: {
+          checkin_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          token: string
+        }
+        Insert: {
+          checkin_id: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          token: string
+        }
+        Update: {
+          checkin_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkin_public_links_checkin_id_fkey"
+            columns: ["checkin_id"]
+            isOneToOne: false
+            referencedRelation: "checkins"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       checkins: {
         Row: {
           amount: number | null
@@ -179,11 +211,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "checkins_customer_id_fkey"
-            columns: ["customer_id"]
+            foreignKeyName: "checkins_wa_contacts_phone_fkey"
+            columns: ["phone"]
             isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
+            referencedRelation: "wa_contacts"
+            referencedColumns: ["phone"]
           },
         ]
       }
@@ -220,62 +252,6 @@ export type Database = {
           resolved_at?: string | null
           resolved_by?: string | null
           status?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "complaints_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      customers: {
-        Row: {
-          accepts_promo: boolean | null
-          accepts_raffle: boolean | null
-          consent_source: string | null
-          consent_text_version: string | null
-          created_at: string | null
-          id: string
-          lgpd_consent: boolean | null
-          lgpd_consent_timestamp: string | null
-          lgpd_version: string | null
-          marketing_opt_in_at: string | null
-          name: string | null
-          phone: string
-          updated_at: string | null
-        }
-        Insert: {
-          accepts_promo?: boolean | null
-          accepts_raffle?: boolean | null
-          consent_source?: string | null
-          consent_text_version?: string | null
-          created_at?: string | null
-          id?: string
-          lgpd_consent?: boolean | null
-          lgpd_consent_timestamp?: string | null
-          lgpd_version?: string | null
-          marketing_opt_in_at?: string | null
-          name?: string | null
-          phone: string
-          updated_at?: string | null
-        }
-        Update: {
-          accepts_promo?: boolean | null
-          accepts_raffle?: boolean | null
-          consent_source?: string | null
-          consent_text_version?: string | null
-          created_at?: string | null
-          id?: string
-          lgpd_consent?: boolean | null
-          lgpd_consent_timestamp?: string | null
-          lgpd_version?: string | null
-          marketing_opt_in_at?: string | null
-          name?: string | null
-          phone?: string
-          updated_at?: string | null
         }
         Relationships: []
       }
@@ -548,13 +524,6 @@ export type Database = {
           status?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "messages_queue_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "messages_queue_promotion_id_fkey"
             columns: ["promotion_id"]
@@ -965,7 +934,6 @@ export type Database = {
       wa_contacts: {
         Row: {
           created_at: string
-          customer_id: string | null
           flow_state: string | null
           id: string
           name: string | null
@@ -979,7 +947,6 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          customer_id?: string | null
           flow_state?: string | null
           id?: string
           name?: string | null
@@ -993,7 +960,6 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          customer_id?: string | null
           flow_state?: string | null
           id?: string
           name?: string | null
@@ -1005,15 +971,7 @@ export type Database = {
           updated_at?: string
           wa_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "wa_contacts_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       wa_messages: {
         Row: {
@@ -1173,13 +1131,6 @@ export type Database = {
             referencedRelation: "whatsapp_campaigns"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "whatsapp_campaign_recipients_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
         ]
       }
       whatsapp_campaigns: {
@@ -1273,15 +1224,7 @@ export type Database = {
           provider?: string
           status?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "whatsapp_logs_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       whatsapp_optout: {
         Row: {

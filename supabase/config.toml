@@ -1,5 +1,8 @@
 project_id = "womgorjjweikolfhrhgp"
 
+[functions.ai-assistant]
+verify_jwt = false
+
 [functions.ai-generate-variations]
 verify_jwt = false
 
