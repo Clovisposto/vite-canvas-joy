@@ -163,61 +163,129 @@ Auto Posto Pará – Economia de verdade!`;
   return DEFAULT_FAREWELL_MESSAGE;
 }
 
-// Send message via Evolution API - returns detailed result for logging
-async function sendWhatsAppMessage(
+// Delay helper
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Send message via Evolution API with robust retry logic
+async function sendWhatsAppMessageWithRetry(
   phone: string, 
-  message: string
-): Promise<{ success: boolean; messageId?: string; error?: string; isTransient?: boolean }> {
+  message: string,
+  maxRetries: number = 3,
+  baseDelayMs: number = 2000
+): Promise<{ success: boolean; messageId?: string; error?: string; isTransient?: boolean; attempts: number }> {
   const baseUrl = sanitizeUrl(Deno.env.get("EVOLUTION_API_URL"));
   const apiKey = sanitizeApiKey(Deno.env.get("EVOLUTION_API_KEY"));
   const instance = sanitizeInstance(Deno.env.get("EVOLUTION_INSTANCE_NAME"));
 
   if (!baseUrl || !apiKey || !instance) {
     console.error("[wa-ai-chatbot] Evolution API not configured");
-    return { success: false, error: "Evolution API não configurada" };
+    return { success: false, error: "Evolution API não configurada", attempts: 0 };
   }
 
   const url = `${baseUrl}/message/sendText/${instance}`;
-  console.log(`[wa-ai-chatbot] Sending message to ${phone}`);
+  let lastError = "";
+  let lastIsTransient = false;
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`[wa-ai-chatbot] Sending message to ${phone} (attempt ${attempt}/${maxRetries})`);
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { apikey: apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ number: phone, text: message }),
-      signal: controller.signal,
-    });
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    clearTimeout(timeoutId);
-    
-    const responseText = await res.text();
-    let responseData: Record<string, unknown> = {};
-    try { responseData = JSON.parse(responseText); } catch { /* ignore */ }
-    
-    if (res.ok) {
-      const messageId = (responseData?.key as Record<string, unknown>)?.id as string || 
-                       responseData?.messageId as string || null;
-      console.log(`[wa-ai-chatbot] Message sent successfully to ${phone}`);
-      return { success: true, messageId: messageId || undefined };
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { apikey: apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ number: phone, text: message }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      
+      const responseText = await res.text();
+      let responseData: Record<string, unknown> = {};
+      try { responseData = JSON.parse(responseText); } catch { /* ignore */ }
+      
+      if (res.ok) {
+        const messageId = (responseData?.key as Record<string, unknown>)?.id as string || 
+                         responseData?.messageId as string || null;
+        console.log(`[wa-ai-chatbot] Message sent successfully to ${phone} on attempt ${attempt}`);
+        return { success: true, messageId: messageId || undefined, attempts: attempt };
+      }
+      
+      // Check for transient errors (Connection Closed, 500, 502, 503, 504 errors)
+      const errorMsg = (responseData?.response as Record<string, unknown>)?.message as string || 
+                      responseData?.error as string || 
+                      `HTTP ${res.status}`;
+      const isTransient = 
+        errorMsg.includes("Connection Closed") || 
+        errorMsg.includes("socket hang up") ||
+        errorMsg.includes("ECONNRESET") ||
+        errorMsg.includes("timeout") ||
+        res.status === 500 || 
+        res.status === 502 || 
+        res.status === 503 || 
+        res.status === 504;
+      
+      lastError = errorMsg;
+      lastIsTransient = isTransient;
+      
+      console.warn(`[wa-ai-chatbot] Attempt ${attempt} failed: ${res.status} - ${errorMsg}`);
+      
+      // If transient error and not last attempt, wait and retry
+      if (isTransient && attempt < maxRetries) {
+        const waitTime = baseDelayMs * Math.pow(2, attempt - 1); // Exponential backoff: 2s, 4s, 8s
+        console.log(`[wa-ai-chatbot] Transient error, waiting ${waitTime}ms before retry...`);
+        await delay(waitTime);
+        continue;
+      }
+      
+      // Non-transient error or last attempt
+      if (!isTransient) {
+        console.error(`[wa-ai-chatbot] Non-transient error, not retrying: ${errorMsg}`);
+        break;
+      }
+      
+    } catch (e) {
+      const errorMsg = String(e);
+      const isTransient = 
+        errorMsg.includes("abort") || 
+        errorMsg.includes("timeout") ||
+        errorMsg.includes("network") ||
+        errorMsg.includes("fetch failed");
+      
+      lastError = errorMsg;
+      lastIsTransient = isTransient;
+      
+      console.warn(`[wa-ai-chatbot] Attempt ${attempt} exception: ${errorMsg}`);
+      
+      if (isTransient && attempt < maxRetries) {
+        const waitTime = baseDelayMs * Math.pow(2, attempt - 1);
+        console.log(`[wa-ai-chatbot] Network error, waiting ${waitTime}ms before retry...`);
+        await delay(waitTime);
+        continue;
+      }
     }
-    
-    // Check for transient errors (Connection Closed, 500 errors)
-    const errorMsg = (responseData?.response as Record<string, unknown>)?.message as string || 
-                    responseData?.error as string || 
-                    `HTTP ${res.status}`;
-    const isTransient = errorMsg.includes("Connection Closed") || res.status === 500;
-    
-    console.error(`[wa-ai-chatbot] Failed to send: ${res.status} - ${responseText.substring(0, 300)}`);
-    return { success: false, error: errorMsg, isTransient };
-  } catch (e) {
-    console.error(`[wa-ai-chatbot] Network error:`, e);
-    const errorMsg = String(e);
-    const isTransient = errorMsg.includes("abort") || errorMsg.includes("timeout");
-    return { success: false, error: errorMsg, isTransient };
   }
+  
+  console.error(`[wa-ai-chatbot] All ${maxRetries} attempts failed for ${phone}`);
+  return { success: false, error: lastError, isTransient: lastIsTransient, attempts: maxRetries };
+}
+
+// Wrapper for backward compatibility
+async function sendWhatsAppMessage(
+  phone: string, 
+  message: string
+): Promise<{ success: boolean; messageId?: string; error?: string; isTransient?: boolean }> {
+  const result = await sendWhatsAppMessageWithRetry(phone, message, 3, 2000);
+  return { 
+    success: result.success, 
+    messageId: result.messageId, 
+    error: result.error, 
+    isTransient: result.isTransient 
+  };
 }
 
 // Check if text looks like a name
@@ -384,6 +452,16 @@ serve(async (req) => {
         error_message: sendResult.error?.substring(0, 500),
         provider: "evolution"
       });
+
+      // Log to whatsapp_logs for dashboard visibility
+      await supabase.from("whatsapp_logs").insert({
+        phone,
+        message: farewellMessage.substring(0, 500),
+        provider: "AI_CHATBOT",
+        status: sendResult.success ? "SENT" : "FAILED",
+        error: sendResult.success ? null : `Chatbot error: ${sendResult.error?.substring(0, 200) || 'Unknown'}`,
+        message_id: sendResult.messageId
+      });
       
       console.log(`[wa-ai-chatbot] Farewell message ${sendResult.success ? 'sent' : 'failed'} to ${phone}`);
       return respond({ success: sendResult.success, action: "farewell_sent", error: sendResult.error });
@@ -436,13 +514,13 @@ serve(async (req) => {
         wa_message_id: sendResult.messageId
       });
 
-      // Also log to whatsapp_logs for compatibility
+      // Also log to whatsapp_logs for compatibility - use SENT/FAILED uppercase
       await supabase.from("whatsapp_logs").insert({
         phone,
         message: welcomeMessage.substring(0, 500),
-        provider: "evolution",
-        status: sendResult.success ? "sent" : "failed",
-        error: sendResult.error?.substring(0, 500),
+        provider: "AI_CHATBOT",
+        status: sendResult.success ? "SENT" : "FAILED",
+        error: sendResult.success ? null : `Chatbot error: ${sendResult.error?.substring(0, 200) || 'Unknown'}`,
         message_id: sendResult.messageId
       });
       
@@ -523,6 +601,16 @@ serve(async (req) => {
           provider: "evolution"
         });
 
+        // Log to whatsapp_logs for dashboard visibility
+        await supabase.from("whatsapp_logs").insert({
+          phone,
+          message: aiResponse.substring(0, 500),
+          provider: "AI_CHATBOT",
+          status: sendResult.success ? "SENT" : "FAILED",
+          error: sendResult.success ? null : `Chatbot error: ${sendResult.error?.substring(0, 200) || 'Unknown'}`,
+          message_id: sendResult.messageId
+        });
+
         return respond({ success: sendResult.success, action: "name_collected", name: cleanedName, error: sendResult.error });
       } else {
         // Not a valid name, ask again politely
@@ -538,6 +626,16 @@ serve(async (req) => {
           status: sendResult.success ? "sent" : "failed",
           error_message: sendResult.error?.substring(0, 500),
           provider: "evolution"
+        });
+
+        // Log to whatsapp_logs for dashboard visibility
+        await supabase.from("whatsapp_logs").insert({
+          phone,
+          message: aiResponse.substring(0, 500),
+          provider: "AI_CHATBOT",
+          status: sendResult.success ? "SENT" : "FAILED",
+          error: sendResult.success ? null : `Chatbot error: ${sendResult.error?.substring(0, 200) || 'Unknown'}`,
+          message_id: sendResult.messageId
         });
 
         return respond({ success: sendResult.success, action: "asked_name_again", error: sendResult.error });
@@ -579,6 +677,16 @@ serve(async (req) => {
         status: sendResult.success ? "sent" : "failed",
         error_message: sendResult.error?.substring(0, 500),
         provider: "evolution"
+      });
+
+      // Log to whatsapp_logs for dashboard visibility
+      await supabase.from("whatsapp_logs").insert({
+        phone,
+        message: finalResponse.substring(0, 500),
+        provider: "AI_CHATBOT",
+        status: sendResult.success ? "SENT" : "FAILED",
+        error: sendResult.success ? null : `Chatbot error: ${sendResult.error?.substring(0, 200) || 'Unknown'}`,
+        message_id: sendResult.messageId
       });
 
       return respond({ success: sendResult.success, action: "conversation_reply", error: sendResult.error });
