@@ -88,18 +88,22 @@ async function executeAction(supabase: any, action: ActionRequest): Promise<{ su
           return { success: false, message: "Título da promoção é obrigatório" };
         }
         
+        // Allowed types: 'desconto', 'brinde', 'informativa', 'relampago'
+        const validTypes = ['desconto', 'brinde', 'informativa', 'relampago'];
+        const safeType = type && validTypes.includes(type) ? type : 'desconto';
+        
         const { data, error } = await supabase.from('promotions').insert({
           title,
           description: description || '',
           discount_value: discount_value || null,
           start_date: start_date || new Date().toISOString(),
           end_date: end_date || null,
-          type: type || 'informativa',
+          type: safeType,
           is_active: true,
         }).select().single();
         
         if (error) throw error;
-        return { success: true, message: `Promoção "${title}" criada com sucesso!`, data };
+        return { success: true, message: `Promoção "${title}" criada com sucesso! Tipo: ${safeType}${discount_value ? `, Desconto: ${discount_value}%` : ''}`, data };
       }
       
       case 'create_campaign': {
@@ -264,7 +268,8 @@ Você PODE executar ações no sistema! Quando o usuário pedir para criar/dispa
 ### Ações Disponíveis:
 
 1. **Criar Promoção** - \`create_promotion\`
-   Parâmetros: title (obrigatório), description, discount_value, start_date, end_date, type
+   Parâmetros: title (obrigatório), description, discount_value, start_date, end_date
+   Tipos válidos para 'type': desconto, brinde, informativa, relampago (padrão: desconto)
 
 2. **Criar Campanha WhatsApp** - \`create_campaign\`
    Parâmetros: name (obrigatório), message (obrigatório), template_name
