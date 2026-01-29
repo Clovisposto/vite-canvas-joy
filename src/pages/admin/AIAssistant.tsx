@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,7 +12,9 @@ import {
   Loader2, 
   Trash2,
   Mic,
-  MicOff
+  MicOff,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -85,18 +87,90 @@ const quickCommands = [
   { label: 'Ajuda com campanhas', message: 'Como faço para criar e disparar uma campanha de WhatsApp?' },
 ];
 
+// Helper function to clean markdown for speech
+const cleanTextForSpeech = (text: string): string => {
+  return text
+    // Remove markdown headers
+    .replace(/#{1,6}\s*/g, '')
+    // Remove bold/italic markers
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    // Remove code blocks
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove links but keep text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove bullet points
+    .replace(/^[\s]*[-*+]\s*/gm, '')
+    // Remove numbered lists markers
+    .replace(/^[\s]*\d+\.\s*/gm, '')
+    // Remove emojis (basic)
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+    // Clean up extra whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+};
+
 export default function AIAssistant() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [voiceSupported, setVoiceSupported] = useState(false);
+  const [ttsSupported, setTtsSupported] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const synthRef = useRef<SpeechSynthesis | null>(null);
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  // Initialize speech recognition
+  // Speak text using Web Speech API TTS
+  const speakText = useCallback((text: string) => {
+    if (!synthRef.current || !voiceEnabled || !ttsSupported) return;
+    
+    // Cancel any ongoing speech
+    synthRef.current.cancel();
+    
+    const cleanedText = cleanTextForSpeech(text);
+    if (!cleanedText) return;
+    
+    const utterance = new SpeechSynthesisUtterance(cleanedText);
+    utterance.lang = 'pt-BR';
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    
+    // Try to find a Portuguese voice
+    const voices = synthRef.current.getVoices();
+    const ptVoice = voices.find(v => v.lang.startsWith('pt')) || voices[0];
+    if (ptVoice) {
+      utterance.voice = ptVoice;
+    }
+    
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    
+    currentUtteranceRef.current = utterance;
+    synthRef.current.speak(utterance);
+  }, [voiceEnabled, ttsSupported]);
+
+  // Stop speaking
+  const stopSpeaking = useCallback(() => {
+    if (synthRef.current) {
+      synthRef.current.cancel();
+      setIsSpeaking(false);
+    }
+  }, []);
+
+  // Initialize speech recognition and synthesis
   useEffect(() => {
+    // Speech Recognition (STT)
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (SpeechRecognitionAPI) {
@@ -128,9 +202,25 @@ export default function AIAssistant() {
       };
     }
 
+    // Speech Synthesis (TTS)
+    if ('speechSynthesis' in window) {
+      synthRef.current = window.speechSynthesis;
+      setTtsSupported(true);
+      
+      // Load voices (they may not be available immediately)
+      const loadVoices = () => {
+        synthRef.current?.getVoices();
+      };
+      loadVoices();
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.abort();
+      }
+      if (synthRef.current) {
+        synthRef.current.cancel();
       }
     };
   }, []);
@@ -156,6 +246,8 @@ export default function AIAssistant() {
     if (isListening) {
       recognitionRef.current.stop();
     } else {
+      // Stop any ongoing speech when starting to listen
+      stopSpeaking();
       try {
         recognitionRef.current.start();
       } catch (error) {
@@ -164,8 +256,18 @@ export default function AIAssistant() {
     }
   };
 
+  const toggleTTS = () => {
+    if (isSpeaking) {
+      stopSpeaking();
+    }
+    setVoiceEnabled(!voiceEnabled);
+  };
+
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
+
+    // Stop any ongoing speech when sending a new message
+    stopSpeaking();
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -179,9 +281,11 @@ export default function AIAssistant() {
     setIsLoading(true);
 
     let assistantContent = '';
+    let fullResponse = '';
 
     const updateAssistant = (chunk: string) => {
       assistantContent += chunk;
+      fullResponse = assistantContent;
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === 'assistant') {
@@ -270,6 +374,14 @@ export default function AIAssistant() {
         }
       }
 
+      // Speak the complete response after streaming is done
+      if (fullResponse && voiceEnabled) {
+        // Small delay to ensure UI is updated
+        setTimeout(() => {
+          speakText(fullResponse);
+        }, 100);
+      }
+
     } catch (error) {
       console.error('AI Assistant error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -297,6 +409,7 @@ export default function AIAssistant() {
   };
 
   const clearHistory = () => {
+    stopSpeaking();
     setMessages([]);
   };
 
@@ -313,17 +426,42 @@ export default function AIAssistant() {
               <h2 className="font-semibold text-foreground">Assistente Inteligente</h2>
               <p className="text-xs text-muted-foreground">
                 Pergunte qualquer coisa sobre o sistema
-                {voiceSupported && ' • Comando de voz disponível'}
+                {voiceSupported && ' • 🎤 Voz'}
+                {ttsSupported && ' • 🔊 Leitura'}
               </p>
             </div>
           </div>
           
-          {messages.length > 0 && (
-            <Button variant="outline" size="sm" onClick={clearHistory}>
-              <Trash2 className="w-4 h-4 mr-2" />
-              Limpar
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* TTS Toggle */}
+            {ttsSupported && (
+              <Button 
+                variant={voiceEnabled ? "default" : "outline"} 
+                size="sm" 
+                onClick={toggleTTS}
+                className="gap-1"
+              >
+                {voiceEnabled ? (
+                  <>
+                    <Volume2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Voz Ativa</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-4 h-4" />
+                    <span className="hidden sm:inline">Voz Muda</span>
+                  </>
+                )}
+              </Button>
+            )}
+            
+            {messages.length > 0 && (
+              <Button variant="outline" size="sm" onClick={clearHistory}>
+                <Trash2 className="w-4 h-4 mr-2" />
+                Limpar
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Chat area */}
@@ -338,12 +476,20 @@ export default function AIAssistant() {
                 <p className="text-muted-foreground mb-6 max-w-md">
                   Posso te ajudar com informações sobre o sistema, análise de dados, 
                   sugestões de correções e muito mais.
+                </p>
+                
+                <div className="flex flex-wrap justify-center gap-2 mb-6 text-sm">
                   {voiceSupported && (
-                    <span className="block mt-2 text-primary">
-                      🎤 Clique no microfone para usar comando de voz!
+                    <span className="px-3 py-1 bg-primary/10 text-primary rounded-full">
+                      🎤 Comando de voz
                     </span>
                   )}
-                </p>
+                  {ttsSupported && (
+                    <span className="px-3 py-1 bg-primary/10 text-primary rounded-full">
+                      🔊 Respostas por voz
+                    </span>
+                  )}
+                </div>
                 
                 {/* Quick commands */}
                 <div className="grid grid-cols-2 gap-2 max-w-md">
@@ -420,11 +566,29 @@ export default function AIAssistant() {
           
           {/* Input area */}
           <CardContent className="border-t p-4">
-            {/* Voice listening indicator */}
-            {isListening && (
+            {/* Voice indicators */}
+            {(isListening || isSpeaking) && (
               <div className="mb-3 flex items-center justify-center gap-2 text-primary animate-pulse">
-                <Mic className="w-5 h-5" />
-                <span className="text-sm font-medium">Ouvindo... Fale agora!</span>
+                {isListening && (
+                  <>
+                    <Mic className="w-5 h-5" />
+                    <span className="text-sm font-medium">Ouvindo... Fale agora!</span>
+                  </>
+                )}
+                {isSpeaking && (
+                  <>
+                    <Volume2 className="w-5 h-5" />
+                    <span className="text-sm font-medium">Falando...</span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={stopSpeaking}
+                      className="h-6 px-2"
+                    >
+                      Parar
+                    </Button>
+                  </>
+                )}
               </div>
             )}
             
@@ -451,6 +615,7 @@ export default function AIAssistant() {
                   )}
                   onClick={toggleVoice}
                   disabled={isLoading}
+                  title={isListening ? "Parar de ouvir" : "Falar comando"}
                 >
                   {isListening ? (
                     <MicOff className="w-4 h-4" />
@@ -475,8 +640,9 @@ export default function AIAssistant() {
             </form>
             
             <p className="text-xs text-muted-foreground mt-2 text-center">
-              O assistente tem acesso somente leitura aos dados do sistema.
-              {voiceSupported && ' • 🎤 Use o microfone para comandos de voz em português.'}
+              {voiceSupported && '🎤 Microfone para falar • '}
+              {ttsSupported && '🔊 Respostas por voz automáticas • '}
+              Acesso somente leitura aos dados
             </p>
           </CardContent>
         </Card>
