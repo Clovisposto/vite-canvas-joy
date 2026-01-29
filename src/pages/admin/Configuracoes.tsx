@@ -90,7 +90,17 @@ export default function AdminConfiguracoes() {
       .then(({ data }) => {
         const map: Record<string, string> = {};
         data?.forEach((s: any) => {
-          map[s.key] = typeof s.value === 'string' ? JSON.parse(s.value) : s.value;
+          // Handle both JSON-stringified and plain values safely
+          if (typeof s.value === 'string') {
+            try {
+              map[s.key] = JSON.parse(s.value);
+            } catch {
+              // Value is not JSON, use as-is
+              map[s.key] = s.value;
+            }
+          } else {
+            map[s.key] = s.value;
+          }
         });
         setSettings(map);
       });
