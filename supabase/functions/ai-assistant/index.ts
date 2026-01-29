@@ -18,12 +18,17 @@ interface SystemStats {
   recentLogs: string[];
 }
 
+interface ActionRequest {
+  type: 'create_promotion' | 'create_campaign' | 'send_campaign' | 'create_raffle' | 'resolve_complaint';
+  params: Record<string, unknown>;
+  description: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getSystemStats(supabase: any): Promise<SystemStats> {
   const today = new Date().toISOString().split('T')[0];
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
   
-  // Run all queries in parallel
   const [
     contactsResult,
     todayCheckinsResult,
@@ -61,6 +66,147 @@ async function getSystemStats(supabase: any): Promise<SystemStats> {
     totalPremios: premiosResult.count || 0,
     recentLogs,
   };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function executeAction(supabase: any, action: ActionRequest): Promise<{ success: boolean; message: string; data?: unknown }> {
+  console.log("[ai-assistant] Executing action:", action.type, action.params);
+  
+  try {
+    switch (action.type) {
+      case 'create_promotion': {
+        const { title, description, discount_value, start_date, end_date, type } = action.params as {
+          title: string;
+          description?: string;
+          discount_value?: number;
+          start_date?: string;
+          end_date?: string;
+          type?: string;
+        };
+        
+        if (!title) {
+          return { success: false, message: "Título da promoção é obrigatório" };
+        }
+        
+        const { data, error } = await supabase.from('promotions').insert({
+          title,
+          description: description || '',
+          discount_value: discount_value || null,
+          start_date: start_date || new Date().toISOString(),
+          end_date: end_date || null,
+          type: type || 'informativa',
+          is_active: true,
+        }).select().single();
+        
+        if (error) throw error;
+        return { success: true, message: `Promoção "${title}" criada com sucesso!`, data };
+      }
+      
+      case 'create_campaign': {
+        const { name, message, template_name } = action.params as {
+          name: string;
+          message: string;
+          template_name?: string;
+        };
+        
+        if (!name || !message) {
+          return { success: false, message: "Nome e mensagem da campanha são obrigatórios" };
+        }
+        
+        // Get count of eligible contacts
+        const { count } = await supabase
+          .from('wa_contacts')
+          .select('id', { count: 'exact', head: true })
+          .eq('opt_in', true);
+        
+        const { data, error } = await supabase.from('whatsapp_campaigns').insert({
+          name,
+          message,
+          template_name: template_name || null,
+          status: 'draft',
+          total_recipients: count || 0,
+        }).select().single();
+        
+        if (error) throw error;
+        return { success: true, message: `Campanha "${name}" criada com ${count || 0} destinatários potenciais! Status: rascunho (aguardando disparo)`, data };
+      }
+      
+      case 'send_campaign': {
+        const { campaign_id } = action.params as { campaign_id: string };
+        
+        if (!campaign_id) {
+          return { success: false, message: "ID da campanha é obrigatório" };
+        }
+        
+        // Update campaign status to 'scheduled'
+        const { data, error } = await supabase
+          .from('whatsapp_campaigns')
+          .update({ status: 'scheduled', scheduled_at: new Date().toISOString() })
+          .eq('id', campaign_id)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        return { success: true, message: `Campanha agendada para disparo! O worker processará em breve.`, data };
+      }
+      
+      case 'create_raffle': {
+        const { name, prize_value, winners_count, rules } = action.params as {
+          name: string;
+          prize_value?: number;
+          winners_count?: number;
+          rules?: string;
+        };
+        
+        if (!name) {
+          return { success: false, message: "Nome do sorteio é obrigatório" };
+        }
+        
+        const { data, error } = await supabase.from('raffles').insert({
+          name,
+          prize_value: prize_value || 100,
+          winners_count: winners_count || 3,
+          rules: rules || null,
+          is_active: true,
+        }).select().single();
+        
+        if (error) throw error;
+        return { success: true, message: `Sorteio "${name}" criado com prêmio de R$${prize_value || 100} para ${winners_count || 3} ganhadores!`, data };
+      }
+      
+      case 'resolve_complaint': {
+        const { complaint_id, resolution_notes } = action.params as {
+          complaint_id: string;
+          resolution_notes: string;
+        };
+        
+        if (!complaint_id) {
+          return { success: false, message: "ID da reclamação é obrigatório" };
+        }
+        
+        const { data, error } = await supabase
+          .from('complaints')
+          .update({ 
+            status: 'resolvido', 
+            resolution_notes: resolution_notes || 'Resolvido via Assistente IA',
+            resolved_at: new Date().toISOString()
+          })
+          .eq('id', complaint_id)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        return { success: true, message: `Reclamação marcada como resolvida!`, data };
+      }
+      
+      default:
+        return { success: false, message: `Ação desconhecida: ${action.type}` };
+    }
+  } catch (error) {
+    console.error("[ai-assistant] Action error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+    return { success: false, message: `Erro ao executar ação: ${errorMessage}` };
+  }
 }
 
 function buildSystemPrompt(stats: SystemStats): string {
@@ -111,32 +257,71 @@ function buildSystemPrompt(stats: SystemStats): string {
 ### Logs Recentes de WhatsApp:
 ${stats.recentLogs.length > 0 ? stats.recentLogs.join('\n') : 'Nenhum log recente disponível.'}
 
-## Capacidades
-Você pode:
+## 🚀 AÇÕES EXECUTÁVEIS (NOVO!)
+
+Você PODE executar ações no sistema! Quando o usuário pedir para criar/disparar algo, você deve responder com um bloco de ação especial.
+
+### Ações Disponíveis:
+
+1. **Criar Promoção** - \`create_promotion\`
+   Parâmetros: title (obrigatório), description, discount_value, start_date, end_date, type
+
+2. **Criar Campanha WhatsApp** - \`create_campaign\`
+   Parâmetros: name (obrigatório), message (obrigatório), template_name
+
+3. **Disparar Campanha** - \`send_campaign\`
+   Parâmetros: campaign_id (obrigatório)
+
+4. **Criar Sorteio** - \`create_raffle\`
+   Parâmetros: name (obrigatório), prize_value, winners_count, rules
+
+5. **Resolver Reclamação** - \`resolve_complaint\`
+   Parâmetros: complaint_id (obrigatório), resolution_notes
+
+### Como Propor Ações:
+
+Quando o usuário pedir uma ação, responda incluindo um bloco JSON especial no formato:
+
+\`\`\`action
+{
+  "type": "create_promotion",
+  "params": {
+    "title": "Promoção de Verão",
+    "description": "10% de desconto no Pix",
+    "discount_value": 10,
+    "type": "desconto"
+  },
+  "description": "Criar promoção de verão com 10% de desconto"
+}
+\`\`\`
+
+O sistema irá detectar esse bloco e mostrar um botão de confirmação para o usuário antes de executar.
+
+### Exemplos de Pedidos:
+
+- "Crie uma promoção de 5% de desconto no Pix" → Proponha create_promotion
+- "Faça uma campanha de WhatsApp avisando sobre a nova promoção" → Proponha create_campaign
+- "Crie um sorteio de R$200 para 5 ganhadores" → Proponha create_raffle
+
+## Capacidades Atualizadas:
 - ✅ Responder perguntas sobre o funcionamento do sistema
 - ✅ Explicar como usar cada módulo
 - ✅ Analisar dados e fornecer insights
-- ✅ Sugerir correções de problemas
+- ✅ **EXECUTAR AÇÕES** com confirmação do usuário
+- ✅ Criar promoções, campanhas, sorteios
+- ✅ Resolver reclamações
 - ✅ Ajudar a criar consultas SQL para análises
-- ✅ Orientar sobre boas práticas
 
-## Limitações
-Você NÃO pode:
-- ❌ Executar alterações diretamente no banco de dados
-- ❌ Acessar dados confidenciais de clientes individuais
-- ❌ Modificar configurações do sistema automaticamente
-
-Quando o usuário pedir uma ação que requer modificação, sugira os passos ou SQL necessário.`;
+Sempre explique o que a ação vai fazer antes de propor, e inclua o bloco \`\`\`action para que o sistema mostre a confirmação.`;
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const { messages } = await req.json();
+    const { messages, executeAction: actionToExecute } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -146,6 +331,17 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // If an action is being executed, handle it
+    if (actionToExecute) {
+      console.log("[ai-assistant] Action execution requested:", actionToExecute);
+      const result = await executeAction(supabase, actionToExecute as ActionRequest);
+      
+      return new Response(
+        JSON.stringify({ actionResult: result }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Get real-time stats from the database
     console.log("[ai-assistant] Fetching system stats...");

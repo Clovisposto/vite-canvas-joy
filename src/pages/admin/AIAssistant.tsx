@@ -16,18 +16,42 @@ import {
   Volume2,
   VolumeX,
   History,
-  RefreshCw
+  Play,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+}
+
+interface ActionRequest {
+  type: 'create_promotion' | 'create_campaign' | 'send_campaign' | 'create_raffle' | 'resolve_complaint';
+  params: Record<string, unknown>;
+  description: string;
+}
+
+interface PendingAction {
+  action: ActionRequest;
+  messageId: string;
 }
 
 // Correct Supabase URL and key
@@ -87,9 +111,18 @@ declare global {
 const quickCommands = [
   { label: 'Resumo do dia', message: 'Me dê um resumo completo do dia de hoje: check-ins, campanhas, reclamações e qualquer ponto de atenção.' },
   { label: 'Status do sistema', message: 'Qual o status atual do sistema? Tudo funcionando corretamente?' },
-  { label: 'Como funciona o sorteio?', message: 'Explique como funciona o sistema de sorteios do Posto 7.' },
-  { label: 'Ajuda com campanhas', message: 'Como faço para criar e disparar uma campanha de WhatsApp?' },
+  { label: 'Criar promoção', message: 'Crie uma promoção de 10% de desconto para pagamentos no Pix, válida por 7 dias.' },
+  { label: 'Criar campanha', message: 'Crie uma campanha de WhatsApp para avisar os clientes sobre uma nova promoção.' },
 ];
+
+// Action type labels in Portuguese
+const actionTypeLabels: Record<string, string> = {
+  create_promotion: '🎯 Criar Promoção',
+  create_campaign: '📢 Criar Campanha',
+  send_campaign: '🚀 Disparar Campanha',
+  create_raffle: '🎰 Criar Sorteio',
+  resolve_complaint: '✅ Resolver Reclamação',
+};
 
 // Helper function to clean markdown for speech
 const cleanTextForSpeech = (text: string): string => {
@@ -110,6 +143,32 @@ const cleanTextForSpeech = (text: string): string => {
     .trim();
 };
 
+// Parse action blocks from AI response
+const parseActionBlocks = (content: string): ActionRequest[] => {
+  const actions: ActionRequest[] = [];
+  const actionRegex = /```action\s*([\s\S]*?)```/g;
+  let match;
+  
+  while ((match = actionRegex.exec(content)) !== null) {
+    try {
+      const actionJson = match[1].trim();
+      const action = JSON.parse(actionJson) as ActionRequest;
+      if (action.type && action.params && action.description) {
+        actions.push(action);
+      }
+    } catch (e) {
+      console.error('Failed to parse action block:', e);
+    }
+  }
+  
+  return actions;
+};
+
+// Remove action blocks from content for display
+const removeActionBlocks = (content: string): string => {
+  return content.replace(/```action\s*[\s\S]*?```/g, '').trim();
+};
+
 export default function AIAssistant() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -121,6 +180,10 @@ export default function AIAssistant() {
   const [ttsSupported, setTtsSupported] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [isExecutingAction, setIsExecutingAction] = useState(false);
+  const [actionResults, setActionResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
+  
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -204,6 +267,7 @@ export default function AIAssistant() {
       if (error) throw error;
 
       setMessages([]);
+      setActionResults(new Map());
       toast({
         title: "Histórico limpo",
         description: "Todas as conversas foram removidas",
@@ -211,6 +275,66 @@ export default function AIAssistant() {
     } catch (error) {
       console.error('Error clearing chat history:', error);
       setMessages([]);
+    }
+  };
+
+  // Execute action via edge function
+  const executeAction = async (action: ActionRequest) => {
+    setIsExecutingAction(true);
+    
+    try {
+      const response = await fetch(CHAT_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+        body: JSON.stringify({ executeAction: action }),
+      });
+
+      const data = await response.json();
+      
+      if (data.actionResult) {
+        const result = data.actionResult as { success: boolean; message: string };
+        
+        // Store the result
+        if (pendingAction) {
+          setActionResults(prev => new Map(prev).set(pendingAction.messageId, result));
+        }
+        
+        // Add result message to chat
+        const resultMessage: Message = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: result.success 
+            ? `✅ **Ação executada com sucesso!**\n\n${result.message}`
+            : `❌ **Falha na execução**\n\n${result.message}`,
+          timestamp: new Date(),
+        };
+        
+        setMessages(prev => [...prev, resultMessage]);
+        await saveMessageToHistory('assistant', resultMessage.content);
+        
+        toast({
+          title: result.success ? "Ação executada!" : "Falha na ação",
+          description: result.message,
+          variant: result.success ? "default" : "destructive",
+        });
+        
+        if (result.success && voiceEnabled) {
+          speakText(result.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error executing action:', error);
+      toast({
+        title: "Erro",
+        description: "Falha ao executar ação. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExecutingAction(false);
+      setPendingAction(null);
     }
   };
 
@@ -362,19 +486,21 @@ export default function AIAssistant() {
 
     let assistantContent = '';
     let fullResponse = '';
+    let currentMessageId = '';
 
     const updateAssistant = (chunk: string) => {
       assistantContent += chunk;
       fullResponse = assistantContent;
       setMessages(prev => {
         const last = prev[prev.length - 1];
-        if (last?.role === 'assistant') {
+        if (last?.role === 'assistant' && last.id === currentMessageId) {
           return prev.map((m, i) => 
             i === prev.length - 1 ? { ...m, content: assistantContent } : m
           );
         }
+        currentMessageId = crypto.randomUUID();
         return [...prev, {
-          id: crypto.randomUUID(),
+          id: currentMessageId,
           role: 'assistant' as const,
           content: assistantContent,
           timestamp: new Date(),
@@ -454,15 +580,23 @@ export default function AIAssistant() {
         }
       }
 
-      // Save assistant response to history
-      if (fullResponse) {
-        await saveMessageToHistory('assistant', fullResponse);
+      // Parse actions from response
+      const actions = parseActionBlocks(fullResponse);
+      if (actions.length > 0) {
+        console.log('Detected actions:', actions);
+        // Set the first action as pending
+        setPendingAction({ action: actions[0], messageId: currentMessageId });
       }
 
-      // Speak the complete response after streaming is done
+      // Save assistant response to history (without action blocks for cleaner history)
+      if (fullResponse) {
+        await saveMessageToHistory('assistant', removeActionBlocks(fullResponse));
+      }
+
+      // Speak the complete response after streaming is done (without action blocks)
       if (fullResponse && voiceEnabled) {
         setTimeout(() => {
-          speakText(fullResponse);
+          speakText(removeActionBlocks(fullResponse));
         }, 100);
       }
 
@@ -504,6 +638,61 @@ export default function AIAssistant() {
     }
   };
 
+  // Render message with action button if applicable
+  const renderMessageContent = (message: Message) => {
+    const actions = parseActionBlocks(message.content);
+    const cleanContent = removeActionBlocks(message.content);
+    const result = actionResults.get(message.id);
+    
+    return (
+      <>
+        <div className="prose prose-sm dark:prose-invert max-w-none">
+          <ReactMarkdown>{cleanContent}</ReactMarkdown>
+        </div>
+        
+        {actions.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {actions.map((action, idx) => (
+              <div key={idx} className="flex flex-col gap-2 p-3 bg-primary/10 rounded-lg border border-primary/20">
+                <div className="flex items-center gap-2">
+                  <Play className="w-4 h-4 text-primary" />
+                  <span className="font-medium text-sm">
+                    {actionTypeLabels[action.type] || action.type}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">{action.description}</p>
+                
+                {result ? (
+                  <div className={cn(
+                    "flex items-center gap-2 text-sm p-2 rounded",
+                    result.success ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-destructive/10 text-destructive"
+                  )}>
+                    {result.success ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                    <span>{result.message}</span>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="w-fit"
+                    onClick={() => setPendingAction({ action, messageId: message.id })}
+                    disabled={isExecutingAction}
+                  >
+                    {isExecutingAction ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <Play className="w-4 h-4 mr-2" />
+                    )}
+                    Executar Ação
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <AdminLayout title="Assistente IA">
       <div className="flex flex-col h-[calc(100vh-180px)] max-w-5xl mx-auto">
@@ -516,10 +705,10 @@ export default function AIAssistant() {
             <div>
               <h2 className="font-semibold text-foreground">Assistente Inteligente</h2>
               <p className="text-xs text-muted-foreground">
-                Pergunte qualquer coisa sobre o sistema
+                Pergunte ou peça ações
                 {voiceSupported && ' • 🎤 Voz'}
                 {ttsSupported && ' • 🔊 Leitura'}
-                {userId && ' • 💾 Histórico salvo'}
+                {userId && ' • 💾 Salvo'}
               </p>
             </div>
           </div>
@@ -552,12 +741,12 @@ export default function AIAssistant() {
                 {voiceEnabled ? (
                   <>
                     <Volume2 className="w-4 h-4" />
-                    <span className="hidden sm:inline">Voz Ativa</span>
+                    <span className="hidden sm:inline">Voz</span>
                   </>
                 ) : (
                   <>
                     <VolumeX className="w-4 h-4" />
-                    <span className="hidden sm:inline">Voz Muda</span>
+                    <span className="hidden sm:inline">Mudo</span>
                   </>
                 )}
               </Button>
@@ -587,8 +776,8 @@ export default function AIAssistant() {
                 </div>
                 <h3 className="text-lg font-semibold mb-2">Olá! Sou o Assistente do Posto 7</h3>
                 <p className="text-muted-foreground mb-6 max-w-md">
-                  Posso te ajudar com informações sobre o sistema, análise de dados, 
-                  sugestões de correções e muito mais.
+                  Posso te ajudar com informações, análises e agora também
+                  <span className="text-primary font-medium"> executar ações</span> como criar promoções e campanhas!
                 </p>
                 
                 <div className="flex flex-wrap justify-center gap-2 mb-6 text-sm">
@@ -602,11 +791,9 @@ export default function AIAssistant() {
                       🔊 Respostas por voz
                     </span>
                   )}
-                  {userId && (
-                    <span className="px-3 py-1 bg-primary/10 text-primary rounded-full">
-                      💾 Histórico persistente
-                    </span>
-                  )}
+                  <span className="px-3 py-1 bg-green-500/10 text-green-700 dark:text-green-400 rounded-full">
+                    ⚡ Ações executáveis
+                  </span>
                 </div>
                 
                 {/* Quick commands */}
@@ -649,9 +836,7 @@ export default function AIAssistant() {
                       )}
                     >
                       {message.role === 'assistant' ? (
-                        <div className="prose prose-sm dark:prose-invert max-w-none">
-                          <ReactMarkdown>{message.content}</ReactMarkdown>
-                        </div>
+                        renderMessageContent(message)
                       ) : (
                         <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                       )}
@@ -716,7 +901,7 @@ export default function AIAssistant() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Digite sua mensagem... (Enter para enviar, Shift+Enter para nova linha)"
+                placeholder="Digite ou peça: 'Crie uma promoção de 10% no Pix'"
                 className="min-h-[44px] max-h-[150px] resize-none"
                 disabled={isLoading || isListening}
               />
@@ -758,14 +943,71 @@ export default function AIAssistant() {
             </form>
             
             <p className="text-xs text-muted-foreground mt-2 text-center">
-              {voiceSupported && '🎤 Microfone para falar • '}
-              {ttsSupported && '🔊 Respostas por voz • '}
-              {userId && '💾 Histórico salvo • '}
-              Acesso somente leitura aos dados
+              ⚡ Ações com confirmação • 
+              {voiceSupported && ' 🎤 Voz • '}
+              {ttsSupported && ' 🔊 Leitura • '}
+              💾 Histórico salvo
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Action Confirmation Dialog */}
+      <AlertDialog open={!!pendingAction} onOpenChange={(open) => !open && setPendingAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Confirmar Ação
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>Você está prestes a executar a seguinte ação:</p>
+                
+                {pendingAction && (
+                  <div className="p-3 bg-muted rounded-lg space-y-2">
+                    <div className="font-medium text-foreground">
+                      {actionTypeLabels[pendingAction.action.type] || pendingAction.action.type}
+                    </div>
+                    <p className="text-sm">{pendingAction.action.description}</p>
+                    
+                    <div className="text-xs text-muted-foreground mt-2">
+                      <strong>Parâmetros:</strong>
+                      <pre className="mt-1 p-2 bg-background rounded text-xs overflow-auto">
+                        {JSON.stringify(pendingAction.action.params, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+                
+                <p className="text-sm text-amber-600 dark:text-amber-400">
+                  Esta ação modificará dados no sistema. Deseja continuar?
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isExecutingAction}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => pendingAction && executeAction(pendingAction.action)}
+              disabled={isExecutingAction}
+              className="bg-primary"
+            >
+              {isExecutingAction ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Executando...
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  Confirmar e Executar
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }
