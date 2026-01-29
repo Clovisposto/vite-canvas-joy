@@ -10,7 +10,9 @@ import {
   User, 
   Bot, 
   Loader2, 
-  Trash2 
+  Trash2,
+  Mic,
+  MicOff
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
@@ -22,7 +24,59 @@ interface Message {
   timestamp: Date;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant`;
+// Correct Supabase URL and key (not using env vars which are undefined)
+const SUPABASE_URL = "https://womgorjjweikolfhrhgp.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvbWdvcmpqd2Vpa29sZmhyaGdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MzE2MTMsImV4cCI6MjA4NDUwNzYxM30.Y9Dl1upWiVcPX0HvigrHdQ3mk0j_VKOma0nJJY0R2ls";
+const CHAT_URL = `${SUPABASE_URL}/functions/v1/ai-assistant`;
+
+// TypeScript declarations for Web Speech API
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message?: string;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  onstart: (() => void) | null;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => SpeechRecognition;
+  }
+}
 
 const quickCommands = [
   { label: 'Resumo do dia', message: 'Me dê um resumo completo do dia de hoje: check-ins, campanhas, reclamações e qualquer ponto de atenção.' },
@@ -35,8 +89,51 @@ export default function AIAssistant() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  // Initialize speech recognition
+  useEffect(() => {
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    if (SpeechRecognitionAPI) {
+      setVoiceSupported(true);
+      recognitionRef.current = new SpeechRecognitionAPI();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.lang = 'pt-BR';
+
+      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+        const transcript = event.results[0][0].transcript;
+        console.log('Voice transcript:', transcript);
+        if (transcript.trim()) {
+          sendMessage(transcript);
+        }
+      };
+
+      recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onstart = () => {
+        setIsListening(true);
+      };
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
+  }, []);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -52,6 +149,20 @@ export default function AIAssistant() {
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
     }
   }, [input]);
+
+  const toggleVoice = () => {
+    if (!recognitionRef.current) return;
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      try {
+        recognitionRef.current.start();
+      } catch (error) {
+        console.error('Failed to start speech recognition:', error);
+      }
+    }
+  };
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -97,7 +208,7 @@ export default function AIAssistant() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
         },
         body: JSON.stringify({ messages: allMessages }),
       });
@@ -200,7 +311,10 @@ export default function AIAssistant() {
             </div>
             <div>
               <h2 className="font-semibold text-foreground">Assistente Inteligente</h2>
-              <p className="text-xs text-muted-foreground">Pergunte qualquer coisa sobre o sistema</p>
+              <p className="text-xs text-muted-foreground">
+                Pergunte qualquer coisa sobre o sistema
+                {voiceSupported && ' • Comando de voz disponível'}
+              </p>
             </div>
           </div>
           
@@ -224,6 +338,11 @@ export default function AIAssistant() {
                 <p className="text-muted-foreground mb-6 max-w-md">
                   Posso te ajudar com informações sobre o sistema, análise de dados, 
                   sugestões de correções e muito mais.
+                  {voiceSupported && (
+                    <span className="block mt-2 text-primary">
+                      🎤 Clique no microfone para usar comando de voz!
+                    </span>
+                  )}
                 </p>
                 
                 {/* Quick commands */}
@@ -301,6 +420,14 @@ export default function AIAssistant() {
           
           {/* Input area */}
           <CardContent className="border-t p-4">
+            {/* Voice listening indicator */}
+            {isListening && (
+              <div className="mb-3 flex items-center justify-center gap-2 text-primary animate-pulse">
+                <Mic className="w-5 h-5" />
+                <span className="text-sm font-medium">Ouvindo... Fale agora!</span>
+              </div>
+            )}
+            
             <form onSubmit={handleSubmit} className="flex gap-2">
               <Textarea
                 ref={textareaRef}
@@ -309,8 +436,30 @@ export default function AIAssistant() {
                 onKeyDown={handleKeyDown}
                 placeholder="Digite sua mensagem... (Enter para enviar, Shift+Enter para nova linha)"
                 className="min-h-[44px] max-h-[150px] resize-none"
-                disabled={isLoading}
+                disabled={isLoading || isListening}
               />
+              
+              {/* Voice button */}
+              {voiceSupported && (
+                <Button 
+                  type="button"
+                  variant={isListening ? "destructive" : "outline"}
+                  size="icon" 
+                  className={cn(
+                    "h-11 w-11 flex-shrink-0 transition-all",
+                    isListening && "animate-pulse"
+                  )}
+                  onClick={toggleVoice}
+                  disabled={isLoading}
+                >
+                  {isListening ? (
+                    <MicOff className="w-4 h-4" />
+                  ) : (
+                    <Mic className="w-4 h-4" />
+                  )}
+                </Button>
+              )}
+              
               <Button 
                 type="submit" 
                 size="icon" 
@@ -327,6 +476,7 @@ export default function AIAssistant() {
             
             <p className="text-xs text-muted-foreground mt-2 text-center">
               O assistente tem acesso somente leitura aos dados do sistema.
+              {voiceSupported && ' • 🎤 Use o microfone para comandos de voz em português.'}
             </p>
           </CardContent>
         </Card>
