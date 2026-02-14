@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.whatsapp-test]
 verify_jwt = false
+
+[functions.create-admin-user]
+verify_jwt = false
