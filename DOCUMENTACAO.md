@@ -1071,4 +1071,126 @@ supabase/
 
 ---
 
+## 🗄️ Como Acessar a Base de Dados
+
+### Acesso pelo Painel Lovable (Cloud View)
+
+1. Abra o projeto no Lovable
+2. Clique no ícone **Cloud** (nuvem) na barra de navegação superior
+3. Navegue até **Database → Tables**
+4. Você verá todas as tabelas listadas à esquerda
+5. Clique em qualquer tabela para ver seus registros
+6. Use o botão **Export** para exportar dados em CSV
+
+### Acesso pelo Supabase Dashboard
+
+1. Acesse [https://supabase.com/dashboard](https://supabase.com/dashboard)
+2. Faça login com a conta vinculada ao projeto
+3. Selecione o projeto **Posto-7-app**
+4. Use as seguintes seções:
+
+| Seção | O que faz |
+|-------|-----------|
+| **Table Editor** | Visualizar, editar, inserir e deletar registros de qualquer tabela |
+| **SQL Editor** | Executar queries SQL diretamente no banco |
+| **Authentication → Users** | Ver e gerenciar usuários cadastrados |
+| **Edge Functions** | Ver logs e status das funções serverless |
+| **Database → Roles** | Ver roles e permissões |
+
+### Queries SQL Úteis
+
+#### Ver todos os contatos opt-in (clientes ativos)
+```sql
+SELECT phone, name, opt_in, opt_in_timestamp, created_at
+FROM wa_contacts
+WHERE opt_in = true
+ORDER BY created_at DESC;
+```
+
+#### Ver check-ins de hoje
+```sql
+SELECT c.phone, wc.name, c.amount, c.liters, c.payment_method, c.attendant_code, c.created_at
+FROM checkins c
+LEFT JOIN wa_contacts wc ON wc.phone = c.phone
+WHERE c.created_at >= CURRENT_DATE
+ORDER BY c.created_at DESC;
+```
+
+#### Ver administradores do sistema
+```sql
+SELECT ur.role, p.email, p.full_name, ur.created_at
+FROM user_roles ur
+JOIN profiles p ON p.id = ur.user_id
+ORDER BY ur.role, p.email;
+```
+
+#### Contar registros por tabela
+```sql
+SELECT 'wa_contacts' AS tabela, COUNT(*) FROM wa_contacts
+UNION ALL SELECT 'checkins', COUNT(*) FROM checkins
+UNION ALL SELECT 'promotions', COUNT(*) FROM promotions
+UNION ALL SELECT 'raffles', COUNT(*) FROM raffles
+UNION ALL SELECT 'premios_qr', COUNT(*) FROM premios_qr
+UNION ALL SELECT 'frentistas', COUNT(*) FROM frentistas
+UNION ALL SELECT 'whatsapp_campaigns', COUNT(*) FROM whatsapp_campaigns;
+```
+
+#### Ver prêmios QR ativos com saldo
+```sql
+SELECT codigo, nome_ganhador, valor_original, valor_restante, status, data_expiracao
+FROM premios_qr
+WHERE status = 'ativo' AND valor_restante > 0
+ORDER BY data_expiracao;
+```
+
+#### Ver últimas mensagens WhatsApp
+```sql
+SELECT phone, direction, content, status, template_name, created_at
+FROM wa_messages
+ORDER BY created_at DESC
+LIMIT 50;
+```
+
+### Acesso pelo Lovable Cloud → Run SQL
+
+1. No Lovable, abra a aba **Cloud**
+2. Vá em **Database**
+3. Clique em **Run SQL** (ícone de terminal)
+4. Cole qualquer query acima e execute
+5. Você pode alternar entre **Test** e **Live** para consultar ambientes diferentes
+
+### Segurança (RLS)
+
+Todas as tabelas possuem **Row-Level Security (RLS)** ativado. As permissões são controladas por duas funções:
+
+| Função | Quem pode |
+|--------|-----------|
+| `is_admin()` | Apenas usuários com role `admin` na tabela `profiles` |
+| `is_staff()` | Usuários com role `admin` ou `operador` |
+
+> ⚠️ **Atenção:** Queries executadas pelo SQL Editor do Supabase Dashboard usam o role `postgres` (bypass de RLS). Queries pelo cliente frontend respeitam as policies.
+
+### Tabelas Principais (Resumo Rápido)
+
+| Tabela | Descrição | Acesso |
+|--------|-----------|--------|
+| `wa_contacts` | Clientes/contatos WhatsApp | Staff |
+| `checkins` | Registros de abastecimento | Staff |
+| `frentistas` | Cadastro de frentistas | Autenticado |
+| `promotions` | Promoções ativas | Público (leitura) |
+| `raffles` | Configuração de sorteios | Público (leitura) |
+| `raffle_runs` | Histórico de sorteios | Autenticado |
+| `premios_qr` | Prêmios com saldo QR | Público (leitura) / Staff (gestão) |
+| `whatsapp_campaigns` | Campanhas de envio | Staff |
+| `livro_caixa` | Controle financeiro | Admin |
+| `stone_tef_logs` | Transações Stone TEF | Admin |
+| `whatsapp_settings` | Config do WhatsApp | Admin |
+| `user_roles` | Permissões RBAC | Admin |
+| `profiles` | Perfis de usuários | Próprio / Admin |
+| `audit_logs` | Auditoria do sistema | Admin (leitura) |
+| `settings` | Configurações globais | Público (leitura) |
+| `system_documentation` | Documentação interna | Público (leitura) |
+
+---
+
 > 📝 **Nota:** Esta documentação é gerada a partir do código-fonte e da estrutura do banco de dados. Mantenha-a atualizada ao fazer alterações significativas no sistema.
