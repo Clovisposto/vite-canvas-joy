@@ -30,6 +30,7 @@ import {
   BookMarked,
   MapPin,
   Bot,
+  FileText,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -70,6 +71,7 @@ const menuItems: MenuItem[] = [
   { href: '/admin/manual', icon: BookOpen, label: 'Manual/Demo' },
   { href: '/admin/duvidas', icon: HelpCircle, label: 'Dúvidas' },
   { href: '/admin/configuracoes', icon: Settings, label: 'Configurações', requiredRole: 'admin' },
+  { href: '/admin/documentacao', icon: FileText, label: 'Documentação', requiredRole: 'admin' },
 ];
 
 export default function AdminLayout({ children, title }: AdminLayoutProps) {
