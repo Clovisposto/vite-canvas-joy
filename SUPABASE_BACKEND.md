@@ -957,4 +957,70 @@ VITE_SUPABASE_PROJECT_ID=womgorjjweikolfhrhgp
 
 ---
 
+## 8. Ambientes: Test vs Live (Dev / Produção)
+
+O Lovable possui **dois ambientes** automáticos. Não existe um terceiro ambiente de "homologação" nativo.
+
+### Visão Geral
+
+| Ambiente | URL | Quando atualiza | Uso |
+|----------|-----|-----------------|-----|
+| **Test** (Preview) | `id-preview--*.lovable.app` | A cada edição de código | Desenvolvimento e testes |
+| **Live** (Publicado) | `vite-canvas-joy.lovable.app` | Somente ao clicar **Publish → Update** | Produção (usuários reais) |
+
+### O que é compartilhado e o que é separado
+
+| Recurso | Test e Live separados? | Detalhes |
+|---------|----------------------|----------|
+| **Frontend** (HTML/CSS/JS) | ✅ Separados | Live só atualiza ao publicar |
+| **Banco de dados** | ✅ Separados | Dados do Test NÃO aparecem no Live e vice-versa |
+| **Edge Functions** | ❌ Compartilhados | Deploy é imediato nos dois ambientes |
+| **Migrations (schema)** | ❌ Compartilhados | Alterações de schema afetam ambos |
+| **Secrets** | ❌ Compartilhados | Mesmas chaves para Test e Live |
+
+### Fluxo de Trabalho Recomendado
+
+```
+1. DESENVOLVER (Test)
+   └─ Editar código no Lovable
+   └─ Testar no preview (iframe da direita)
+   └─ Verificar dados no banco Test (Cloud → Database → Tables)
+
+2. VALIDAR (Test)
+   └─ Testar fluxos completos no preview
+   └─ Conferir logs de Edge Functions
+   └─ Validar RLS e permissões
+
+3. PUBLICAR (Live)
+   └─ Clicar em Publish → Update
+   └─ Verificar o app publicado em vite-canvas-joy.lovable.app
+   └─ Conferir dados no banco Live (Cloud → Database → alternar para Live)
+```
+
+### ⚠️ Cuidados Importantes
+
+1. **Edge Functions deployam imediatamente** — se você alterar uma Edge Function, ela já estará ativa em produção antes de publicar o frontend
+2. **Migrations são irreversíveis** — alterações no schema (criar/remover tabelas/colunas) afetam ambos os ambientes instantaneamente
+3. **Dados são independentes** — se você inserir dados de teste no preview, eles NÃO vão para produção
+4. **Dados de produção existem apenas no Live** — os 912 contatos, 875 check-ins e demais registros reais estão no ambiente Live
+
+### Como Consultar Dados de Cada Ambiente
+
+No Lovable Cloud:
+1. Abra a aba **Cloud** (ícone de nuvem)
+2. Vá em **Database → Tables** ou **Run SQL**
+3. Use o seletor **Test / Live** para alternar entre ambientes
+
+### Alternativas para Homologação
+
+Se precisar de um ambiente intermediário de homologação:
+
+| Opção | Como fazer | Prós | Contras |
+|-------|-----------|------|---------|
+| **Remix** | Settings → Remix this project | Cópia completa, ambiente isolado | Banco separado, precisa manter sincronizado |
+| **GitHub + Branches** | Conectar ao GitHub, usar branches | Controle de versão profissional | Requer conhecimento de Git |
+| **Testar no Preview** | Usar o ambiente Test como homologação | Já funciona, sem config extra | Não é 100% isolado do dev |
+
+---
+
 > 📝 **Última atualização:** Fevereiro 2026
