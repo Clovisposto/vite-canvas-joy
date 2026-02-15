@@ -2,6 +2,7 @@
 
 ## Índice
 
+0. [Glossário de Conceitos](#0-glossário-de-conceitos)
 1. [Conexão e Configuração](#1-conexão-e-configuração)
 2. [Autenticação e Autorização](#2-autenticação-e-autorização)
 3. [Tabelas e CRUD](#3-tabelas-e-crud)
@@ -9,6 +10,189 @@
 5. [Database Functions](#5-database-functions)
 6. [Edge Functions](#6-edge-functions)
 7. [Secrets e Variáveis de Ambiente](#7-secrets-e-variáveis-de-ambiente)
+
+---
+
+## 0. Glossário de Conceitos
+
+Antes de mergulhar na documentação técnica, é importante entender os conceitos fundamentais usados no backend deste projeto.
+
+### 🗄️ Supabase
+
+**O que é:** Uma plataforma de backend completa construída sobre o PostgreSQL. Funciona como uma alternativa ao Firebase, mas usando um banco de dados relacional de verdade.
+
+**O que ele fornece para nós:**
+- Banco de dados PostgreSQL hospedado na nuvem
+- Autenticação de usuários (login, registro, sessões)
+- APIs REST automáticas para acessar o banco
+- Edge Functions (funções serverless)
+- Armazenamento de arquivos (Storage)
+
+**Analogia simples:** É como ter um servidor completo (banco de dados + API + autenticação) sem precisar configurar ou manter servidores próprios.
+
+---
+
+### 🔒 RLS (Row-Level Security)
+
+**O que é:** "Segurança em Nível de Linha" — é um recurso do PostgreSQL que controla **quem pode ver ou modificar cada linha** de uma tabela.
+
+**Por que é importante:** Sem RLS, qualquer pessoa com a chave pública (anon key) poderia ler TODOS os dados do banco. Com RLS, definimos regras como:
+- "Clientes anônimos só podem ver promoções **ativas**"
+- "Apenas **admin** pode ver o livro caixa"
+- "Apenas **staff** pode ver os check-ins"
+
+**Como funciona na prática:**
+
+```sql
+-- Exemplo: Apenas staff pode ler check-ins
+CREATE POLICY "Staff can read checkins"
+ON public.checkins
+FOR SELECT                    -- Aplica-se a leituras
+TO authenticated              -- Só para usuários logados
+USING (public.is_staff());    -- Condição: precisa ser staff
+```
+
+**Operações controladas:**
+| Operação | Significado |
+|----------|-------------|
+| `SELECT` | Ler/consultar dados |
+| `INSERT` | Inserir novos registros |
+| `UPDATE` | Atualizar registros existentes |
+| `DELETE` | Excluir registros |
+| `ALL` | Todas as operações acima |
+
+**Termos importantes nas policies:**
+- `USING (condição)` → Filtra quais linhas existentes o usuário pode acessar (SELECT, UPDATE, DELETE)
+- `WITH CHECK (condição)` → Valida se o usuário pode inserir/modificar essa linha (INSERT, UPDATE)
+- `TO authenticated` → Aplica-se apenas a usuários logados
+- `TO anon` → Aplica-se a usuários não logados (visitantes do PWA)
+
+---
+
+### ⚡ Edge Functions
+
+**O que é:** São funções que rodam em servidores do Supabase (não no navegador do usuário). São escritas em TypeScript/Deno e executam tarefas que não podem ser feitas no frontend.
+
+**Por que usar Edge Functions em vez de fazer tudo no frontend?**
+1. **Segurança:** Guardam chaves secretas (API keys) que não podem ser expostas no navegador
+2. **Integrações externas:** Comunicam com APIs de terceiros (Evolution API, OpenAI, Stone)
+3. **Lógica complexa:** Processam dados pesados sem travar o navegador
+4. **Bypass de RLS:** Usam `service_role_key` para acessar qualquer dado sem restrições de RLS
+
+**Como funciona:**
+
+```
+Navegador do usuário → chama Edge Function → Edge Function acessa banco/APIs → retorna resultado
+```
+
+**Exemplo real no projeto:**
+- O usuário clica "Enviar campanha WhatsApp"
+- O frontend chama a Edge Function `wa-campaign-run`
+- A função lê os contatos do banco, envia mensagens via Evolution API, e atualiza os status
+
+**Como chamar no código:**
+
+```typescript
+const { data, error } = await supabase.functions.invoke('wa-send', {
+  body: { phone: '5511999999999', message: 'Olá!' }
+});
+```
+
+---
+
+### 📞 RPC (Remote Procedure Call)
+
+**O que é:** "Chamada de Procedimento Remoto" — é uma forma de executar **funções SQL** no banco de dados diretamente do frontend.
+
+**Diferença entre RPC e query normal:**
+
+| Aspecto | Query normal | RPC |
+|---------|-------------|-----|
+| Exemplo | `supabase.from('checkins').select('*')` | `supabase.rpc('public_create_checkin_and_token', {...})` |
+| O que faz | Lê/escreve em UMA tabela | Executa lógica complexa em VÁRIAS tabelas |
+| Segurança | Respeita RLS | Pode usar SECURITY DEFINER (bypass RLS) |
+| Uso | CRUD simples | Operações que envolvem múltiplas etapas |
+
+**Exemplo real no projeto:**
+
+A função `public_create_checkin_and_token` faz **4 coisas em uma única chamada**:
+1. Garante que o contato existe em `wa_contacts` (upsert)
+2. Gera um token único
+3. Cria o check-in em `checkins`
+4. Cria o link público em `checkin_public_links`
+
+Se fizéssemos isso com queries normais, seriam 4 chamadas separadas, mais lentas e com risco de falha parcial.
+
+---
+
+### 🛡️ SECURITY DEFINER
+
+**O que é:** Um modificador em funções SQL que faz a função rodar com as permissões do **dono da função** (geralmente o administrador do banco), **não** do usuário que está chamando.
+
+**Por que é útil:** Permite que um visitante anônimo execute uma ação que normalmente ele não teria permissão. A função valida internamente se a ação é permitida.
+
+**Exemplo:** Um visitante anônimo do PWA não pode escrever diretamente na tabela `checkins` (protegida por RLS). Mas pode chamar `public_create_checkin_and_token()` que é SECURITY DEFINER e faz o insert internamente.
+
+---
+
+### 🔑 RBAC (Role-Based Access Control)
+
+**O que é:** "Controle de Acesso Baseado em Papéis" — cada usuário tem um **papel** (role) que define o que ele pode fazer.
+
+**Papéis no Posto 7:**
+
+| Role | Pode fazer | Quem é |
+|------|-----------|--------|
+| `admin` | Tudo: configurações, financeiro, usuários, WhatsApp | Dono/gerente do posto |
+| `operador` | Operacional: check-ins, contatos, campanhas | Funcionário de confiança |
+| `viewer` | Apenas visualizar dados básicos | Usuário padrão ao criar conta |
+
+**Hierarquia:**
+```
+admin > operador > viewer > anon (visitante sem login)
+```
+
+---
+
+### 📊 CRUD
+
+**O que é:** Acrônimo para as 4 operações básicas em qualquer banco de dados:
+
+| Letra | Operação | SQL | Supabase |
+|-------|----------|-----|----------|
+| **C** | Create (Criar) | `INSERT` | `.insert()` |
+| **R** | Read (Ler) | `SELECT` | `.select()` |
+| **U** | Update (Atualizar) | `UPDATE` | `.update()` |
+| **D** | Delete (Excluir) | `DELETE` | `.delete()` |
+
+---
+
+### 🔄 Triggers
+
+**O que é:** "Gatilhos" — são ações automáticas que o banco de dados executa quando algo acontece em uma tabela.
+
+**Exemplo no projeto:**
+- Quando um novo usuário se registra (`INSERT` em `auth.users`), o trigger `on_auth_user_created` automaticamente cria um perfil na tabela `profiles`
+- Quando qualquer tabela é atualizada, o trigger `update_updated_at` automaticamente atualiza o campo `updated_at` com a data/hora atual
+
+---
+
+### 🏗️ Migrations
+
+**O que é:** São scripts SQL que definem ou alteram a estrutura do banco de dados (criar tabelas, adicionar colunas, criar policies, etc.). São executados em ordem cronológica.
+
+**No projeto:** Estão em `supabase/migrations/` e cada arquivo tem um timestamp no nome (ex: `20251219160006_...sql`). Isso garante que as alterações sejam aplicadas na ordem correta.
+
+---
+
+### 🌐 Anon Key vs Service Role Key
+
+| Chave | Quem usa | Respeita RLS? | Onde fica |
+|-------|----------|---------------|-----------|
+| **Anon Key** (publishable) | Frontend/navegador | ✅ Sim | Código fonte (pública) |
+| **Service Role Key** (secret) | Edge Functions/backend | ❌ Não (bypass) | Secrets do Supabase (privada) |
+
+> ⚠️ A **Service Role Key** NUNCA deve ser exposta no frontend. Ela dá acesso total ao banco sem restrições.
 
 ---
 
