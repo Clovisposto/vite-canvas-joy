@@ -103,10 +103,6 @@ export default function AdminLogin() {
                 Entrar
               </Button>
 
-              <Button type="button" variant="link" className="w-full text-sm" disabled={forgotLoading} onClick={handleForgotPassword}>
-                {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Esqueci minha senha
-              </Button>
             </form>
           </CardContent>
         </Card>
