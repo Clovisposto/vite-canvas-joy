@@ -1,30 +1,30 @@
-# 📊 Dashboard de Saúde — Posto 7
+# 📊 Painel de Saúde do Sistema — Posto 7
 
-> Dados reais de produção · Período: 21/Jan – 19/Fev/2026 (30 dias)
+> Dados reais do sistema · 21/Jan até 19/Fev/2026 (30 dias)
 
 ---
 
-## 🏥 Saúde Geral
+## 🏥 Resumo Rápido
 
 ```mermaid
-pie title Módulos por Status
-    "Funcionando (4)" : 4
-    "Com Problemas (5)" : 5
-    "Nunca Usado (6)" : 6
-    "Legado (3)" : 3
+pie title Como estão os módulos do sistema
+    "Funcionando bem (4)" : 4
+    "Funcionando com problemas (5)" : 5
+    "Nunca foram usados (6)" : 6
+    "Desativados / antigos (3)" : 3
 ```
 
-| Indicador | Valor | Tendência |
+| O que medir | Número | Como está |
 |---|---|---|
-| Check-ins / dia | **25** | 📈 Crescendo |
-| Base de contatos | **926** | 📈 +12/semana |
-| Taxa envio WhatsApp | **47%** | 🔻 Crítico |
-| Sorteios realizados | **7** | ✅ Estável |
-| Features em uso | **4 de 15** | ⚠️ 27% |
+| Check-ins por dia | **25** | 📈 Subindo |
+| Clientes cadastrados | **926** | 📈 Crescendo |
+| Mensagens WhatsApp entregues | **47%** | 🔻 Ruim |
+| Sorteios feitos | **7** | ✅ Normal |
+| Partes do sistema em uso | **4 de 15** | ⚠️ Só 27% |
 
 ---
 
-## 📈 Check-ins — Evolução Semanal
+## 📈 Check-ins — Como está o movimento
 
 ```mermaid
 xychart-beta
@@ -35,31 +35,35 @@ xychart-beta
     line [33, 127, 277, 110, 37]
 ```
 
-| Semana | Check-ins | Telefones Únicos | Taxa Retorno |
+> Barra = total de check-ins · Linha = clientes diferentes
+
+| Semana | Check-ins | Clientes novos | Clientes que voltaram |
 |---|---|---|---|
 | 19/Jan | 48 | 33 | 31% |
 | 26/Jan | 197 | 127 | 36% |
 | 02/Fev | **435** | **277** | 36% |
 | 09/Fev | 202 | 110 | 46% |
 | 16/Fev | 48 | 37 | 23% |
-| **Total** | **930** | **—** | **—** |
+| **Total** | **930** | — | — |
 
-> 📌 Pico na semana de 02/Fev. Semana atual (16/Fev) ainda parcial.
+> 📌 Melhor semana foi a de 02/Fev. A última semana ainda está incompleta.
 
 ---
 
-## 📱 WhatsApp — Taxa de Sucesso vs Falha
+## 📱 WhatsApp — Mensagens que chegaram vs que falharam
 
 ```mermaid
 xychart-beta
-    title "Envios WhatsApp: Sucesso vs Falha"
+    title "WhatsApp: Entregues vs Falhas"
     x-axis ["19/Jan", "26/Jan", "02/Fev", "09/Fev", "16/Fev"]
     y-axis "Mensagens" 0 --> 700
     bar [43, 231, 217, 227, 83]
     line [1, 53, 659, 176, 16]
 ```
 
-| Semana | ✅ Enviados | ❌ Falhas | Taxa Sucesso |
+> Barra verde = entregues · Linha vermelha = falharam
+
+| Semana | ✅ Entregues | ❌ Falharam | % que chegou |
 |---|---|---|---|
 | 19/Jan | 43 | 1 | **98%** ✅ |
 | 26/Jan | 231 | 53 | **81%** ✅ |
@@ -68,18 +72,18 @@ xychart-beta
 | 16/Fev | 83 | 16 | **84%** ✅ |
 | **Total** | **801** | **905** | **47%** |
 
-> 🔴 **Colapso na semana 02/Fev** — 659 falhas (75%). Recuperou parcialmente depois.
+> 🔴 **Na semana de 02/Fev o WhatsApp quase parou** — 75% das mensagens falharam. Depois melhorou mas ainda não está 100%.
 
 ---
 
-## 🎯 Campanhas WhatsApp — Funil
+## 🎯 Campanhas WhatsApp — O que aconteceu
 
 ```mermaid
 flowchart LR
-    A["22 campanhas\ncriadas"] --> B["7.792 recipients\ncarregados"]
-    B --> C["497 enviados\n6.4%"]
-    B --> D["39 falharam\n0.5%"]
-    B --> E["7.256 pending\n93.1%"]
+    A["22 campanhas\ncriadas"] --> B["7.792 contatos\nadicionados"]
+    B --> C["497 receberam\na mensagem"]
+    B --> D["39 deu erro"]
+    B --> E["7.256 nunca\nreceberam nada"]
     
     style A fill:#3b82f6,color:#fff
     style C fill:#22c55e,color:#fff
@@ -87,112 +91,108 @@ flowchart LR
     style E fill:#6b7280,color:#fff
 ```
 
-| Etapa | Número | % do Total |
+| O que aconteceu | Quantidade | % |
 |---|---|---|
 | Campanhas criadas | 22 | — |
-| Recipients carregados | 7.792 | 100% |
-| ✅ Enviados | 497 | 6.4% |
-| ❌ Falharam | 39 | 0.5% |
-| ⏳ Nunca processados | **7.256** | **93.1%** |
-| Campanhas completadas | **0** | **0%** |
+| Contatos adicionados | 7.792 | 100% |
+| ✅ Receberam a mensagem | 497 | 6% |
+| ❌ Deu erro no envio | 39 | 0.5% |
+| ⏳ Nunca foram enviados | **7.256** | **93%** |
+| Campanhas que terminaram | **0** | **0%** |
 
-> 🔴 **93% dos recipients nunca foram processados.** Nenhuma campanha chegou ao fim.
+> 🔴 **93% dos contatos nunca receberam a mensagem.** Nenhuma campanha rodou até o final.
 
 ---
 
-## 👥 Base de Contatos — Qualidade
+## 👥 Clientes — Qualidade da base
 
 ```mermaid
-pie title 926 Contatos por Estado
-    "Sem opt-in (461)" : 461
-    "Welcome falhou (254)" : 254
-    "Aguardando nome (166)" : 166
-    "Opt-in OK (45)" : 45
+pie title Situação dos 926 clientes
+    "Nao aceitaram receber msgs (461)" : 461
+    "Boas-vindas falhou (254)" : 254
+    "Esperando resposta (166)" : 166
+    "Prontos pra receber (45)" : 45
 ```
 
-| Estado | Quantidade | % | Significado |
+| Situação | Quantidade | % | O que significa |
 |---|---|---|---|
-| `opt_in=false` | **461** | 50% | Nunca aceitaram marketing |
-| `welcome_failed` | **254** | 27% | Msg boas-vindas falhou |
-| `awaiting_name` | **166** | 18% | Esperando resposta |
-| `opt_in=true + new` | **45** | 5% | Prontos para campanhas |
+| Não aceitaram receber | **461** | 50% | Fizeram check-in mas não aceitaram WhatsApp |
+| Boas-vindas falhou | **254** | 27% | O sistema tentou mandar mensagem mas não conseguiu |
+| Esperando resposta | **166** | 18% | Receberam boas-vindas mas não responderam |
+| Prontos | **45** | 5% | Podem receber campanhas normalmente |
 
-> ⚠️ Apenas **5% da base** está 100% pronta para receber campanhas.
+> ⚠️ **Só 45 clientes (5%) estão prontos pra receber campanhas.**
 
 ---
 
-## 🎰 Sorteios — Crescimento do Pool
+## 🎰 Sorteios — Funcionando bem
 
 ```mermaid
 xychart-beta
-    title "Elegíveis por Sorteio"
-    x-axis ["26/Jan", "29/Jan*", "03/Fev", "09/Fev", "18/Fev"]
-    y-axis "Elegíveis" 0 --> 1000
+    title "Quantos clientes participam dos sorteios"
+    x-axis ["26/Jan", "29/Jan", "03/Fev", "09/Fev", "18/Fev"]
+    y-axis "Participantes" 0 --> 1000
     bar [23, 10, 705, 871, 920]
 ```
 
-| Data | Elegíveis | Ganhadores | Tipo |
+| Data | Participantes | Ganhadores | Observação |
 |---|---|---|---|
-| 26/Jan | 23 | 3 | Real |
-| 29/Jan | 10 | 3 | *Teste* |
-| 03/Fev | 705 | 5 (3 runs) | Real |
-| 09/Fev | 871 | 3 | Real |
-| 18/Fev | **920** | 3 | Real |
+| 26/Jan | 23 | 3 | Primeiro sorteio |
+| 29/Jan | 10 | 3 | Foi um teste |
+| 03/Fev | 705 | 5 | 3 sorteios no dia |
+| 09/Fev | 871 | 3 | — |
+| 18/Fev | **920** | 3 | Último realizado |
 
-> ✅ Pool crescendo de 23 → 920 em 24 dias. Feature saudável.
+> ✅ **Os sorteios estão funcionando bem.** O número de participantes subiu de 23 pra 920 em 24 dias.
 
 ---
 
-## 🔴 Módulos Inativos (0 registros)
+## 🔴 Partes do sistema que nunca foram usadas
 
-| Módulo | Tabelas | Investimento de Dev | Decisão Sugerida |
+| Módulo | O que faz | Quanto custou pra fazer | O que fazer? |
 |---|---|---|---|
-| Livro Caixa | `livro_caixa` | Alto (UI + DRE) | Ativar ou Remover |
-| Prêmios QR | `premios_qr`, `premios_qr_consumos` | Alto (RPC + UI + QR) | Ativar ou Remover |
-| Stone TEF | `stone_tef_logs` | Médio (Webhook + UI) | Ativar ou Remover |
-| Importação CSV | `imports_logs` | Médio (Parser + UI) | Ativar ou Remover |
-| Frentista Metas | `frentista_metas` | Médio (UI + lógica) | Ativar ou Remover |
-| Frentista PINs | `frentistas_pins` | Baixo (hash + dialog) | Ativar ou Remover |
+| **Livro Caixa** | Controle financeiro do posto | Bastante trabalho | Começar a usar ou tirar |
+| **Prêmios QR** | Dar prêmios por QR Code | Bastante trabalho | Começar a usar ou tirar |
+| **Stone TEF** | Puxar dados da maquininha | Trabalho médio | Configurar a maquininha ou tirar |
+| **Importação CSV** | Importar planilha de clientes | Trabalho médio | Começar a usar ou tirar |
+| **Metas de Frentista** | Meta diária/mensal pro frentista | Trabalho médio | Começar a usar ou tirar |
+| **PIN de Frentista** | Senha do frentista pra validar prêmio | Pouco trabalho | Começar a usar ou tirar |
 
-> 💡 **6 módulos construídos que nunca foram usados = código morto que aumenta complexidade sem gerar valor.**
-
----
-
-## 📊 Scorecard Executivo
-
-```mermaid
-quadrantChart
-    title Features: Uso vs Saúde
-    x-axis "Baixo Uso" --> "Alto Uso"
-    y-axis "Com Problemas" --> "Saudável"
-    quadrant-1 "Manter e Otimizar"
-    quadrant-2 "Investigar"
-    quadrant-3 "Considerar Remover"
-    quadrant-4 "Corrigir Urgente"
-    Check-ins: [0.9, 0.95]
-    Sorteios: [0.5, 0.9]
-    Promoções: [0.4, 0.85]
-    Auth: [0.3, 0.8]
-    WhatsApp Campanhas: [0.7, 0.15]
-    Chatbot AI: [0.5, 0.25]
-    Reclamações: [0.1, 0.6]
-    AI Assistant: [0.1, 0.5]
-    Frentistas: [0.15, 0.4]
-    Livro Caixa: [0.01, 0.5]
-    Prêmios QR: [0.01, 0.5]
-    Stone TEF: [0.01, 0.3]
-```
+> 💡 **São 6 partes do sistema que foram construídas mas nunca ninguém usou.**
 
 ---
 
-## ⚡ Top 3 Ações para Tomada de Decisão
+## 📊 Visão Geral — O que funciona e o que não funciona
 
-| # | Ação | Impacto | Esforço |
+| Módulo | Uso | Saúde | Onde está |
 |---|---|---|---|
-| 🥇 | **Corrigir WhatsApp** — Evolution API com 53% falha, 93% recipients parados | 🔴 Crítico | Médio |
-| 🥈 | **Reativar base** — 254 welcome_failed + 461 sem opt-in = 77% da base inativa | 🟡 Alto | Baixo |
-| 🥉 | **Decidir sobre módulos mortos** — 6 features nunca usadas consumindo manutenção | 🟡 Médio | Baixo |
+| ✅ Check-ins | **Alto** (930) | 🟢 Perfeito | Funciona bem, crescendo |
+| ✅ Sorteios | **Médio** (7) | 🟢 Perfeito | Estável, pool crescendo |
+| ✅ Promoções | **Baixo** (3) | 🟢 OK | Poucas criadas mas funciona |
+| ✅ Login Admin | **Baixo** (2 users) | 🟢 OK | Funcionando |
+| ⚠️ WhatsApp Campanhas | **Alto** (22 campanhas) | 🔴 **Quebrado** | 93% dos envios travados |
+| ⚠️ Chatbot WhatsApp | **Médio** (887 msgs) | 🟡 Instável | 51% falha no envio |
+| ⚠️ Reclamações | **Mínimo** (1) | 🟡 OK | Funciona mas ninguém usa |
+| ⚠️ Assistente IA | **Mínimo** (5 msgs) | 🟡 OK | Funciona mas ninguém usa |
+| ⚠️ Frentistas | **Mínimo** (3) | 🟡 Incompleto | Cadastro OK, resto parado |
+| ❌ Livro Caixa | **Zero** | — | Nunca usado |
+| ❌ Prêmios QR | **Zero** | — | Nunca usado |
+| ❌ Stone TEF | **Zero** | — | Nunca ativado |
+| ❌ Importação CSV | **Zero** | — | Nunca usado |
+| ❌ Metas Frentista | **Zero** | — | Nunca usado |
+| ❌ PIN Frentista | **Zero** | — | Nunca usado |
 
 ---
 
-> 📅 Gerado: 19/02/2026 · Fonte: Banco de produção Supabase
+## ⚡ O que fazer agora — 3 prioridades
+
+| # | O que fazer | Por quê | Dificuldade |
+|---|---|---|---|
+| 🥇 | **Arrumar o WhatsApp** | Mais da metade das mensagens não chegam. 93% das campanhas não foram enviadas. | Média |
+| 🥈 | **Recuperar a base de clientes** | 77% dos clientes não estão recebendo nada. Precisa reenviar boas-vindas e reconquistar opt-in. | Fácil |
+| 🥉 | **Decidir sobre os módulos parados** | 6 partes do sistema nunca foram usadas. Ou começa a usar ou tira pra simplificar. | Fácil |
+
+---
+
+> 📅 Relatório gerado em: 19/02/2026  
+> 📊 Fonte: Banco de dados real do sistema
