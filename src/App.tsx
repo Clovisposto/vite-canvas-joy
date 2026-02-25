@@ -57,38 +57,33 @@ function App() {
               <Route path="/app" element={<Navigate to="/aplicativo" replace />} />
               <Route path="/abastecimento/:token" element={<AbastecimentoStatus />} />
               <Route path="/premio/:codigo" element={<PremioValidacao />} />
-              <Route path="/admin/login" element={<AdminLogin />} />
-              <Route path="/admin/reset" element={<AdminResetPassword />} />
+              <Route path="/admin/login" element={<Navigate to="/admin" replace />} />
+              <Route path="/admin/reset" element={<Navigate to="/admin" replace />} />
               
-              {/* Protected admin routes - Dashboard accessible to all authenticated */}
-              <Route path="/admin" element={<RoleGuard><AdminDashboard /></RoleGuard>} />
-              <Route path="/admin/manual" element={<RoleGuard><AdminManual /></RoleGuard>} />
-              <Route path="/admin/duvidas" element={<RoleGuard><AdminDuvidas /></RoleGuard>} />
-              
-              {/* Staff routes (admin + operador) */}
-              <Route path="/admin/captura" element={<RoleGuard requiredRole="staff"><AdminCaptura /></RoleGuard>} />
-              <Route path="/admin/producao" element={<RoleGuard requiredRole="staff"><AdminProducao /></RoleGuard>} />
-              <Route path="/admin/sorteios" element={<RoleGuard requiredRole="staff"><AdminSorteios /></RoleGuard>} />
-              <Route path="/admin/historico-sorteios" element={<RoleGuard requiredRole="staff"><AdminHistoricoSorteios /></RoleGuard>} />
-              <Route path="/admin/promocoes" element={<RoleGuard requiredRole="staff"><AdminPromocoes /></RoleGuard>} />
-              <Route path="/admin/atendimento" element={<RoleGuard requiredRole="staff"><AdminAtendimento /></RoleGuard>} />
-              {/* Rota de avaliações removida */}
-              <Route path="/admin/qrcode" element={<RoleGuard requiredRole="staff"><AdminQRCode /></RoleGuard>} />
-              <Route path="/admin/qr" element={<RoleGuard requiredRole="staff"><AdminQRCode /></RoleGuard>} />
-              <Route path="/admin/frentista" element={<RoleGuard requiredRole="staff"><AdminFrentista /></RoleGuard>} />
-              <Route path="/admin/relatorio-frentistas" element={<RoleGuard requiredRole="staff"><RelatorioFrentistas /></RoleGuard>} />
-              <Route path="/admin/relatorio-producao" element={<RoleGuard requiredRole="staff"><RelatorioProducao /></RoleGuard>} />
-              <Route path="/admin/qr-premiacao" element={<RoleGuard requiredRole="staff"><QRPremiacao /></RoleGuard>} />
-              
-              {/* Admin-only routes */}
-              <Route path="/admin/integracoes" element={<RoleGuard requiredRole="admin"><AdminIntegracoes /></RoleGuard>} />
-              <Route path="/admin/pontos-captura" element={<RoleGuard requiredRole="admin"><PontosCaptura /></RoleGuard>} />
-              <Route path="/admin/whatsapp" element={<RoleGuard requiredRole="admin"><AdminWhatsApp /></RoleGuard>} />
-              <Route path="/admin/robo-whatsapp" element={<RoleGuard requiredRole="admin"><RoboWhatsapp /></RoleGuard>} />
-              <Route path="/admin/configuracoes" element={<RoleGuard requiredRole="admin"><AdminConfiguracoes /></RoleGuard>} />
-              <Route path="/admin/livro-caixa" element={<RoleGuard requiredRole="admin"><LivroCaixa /></RoleGuard>} />
-              <Route path="/admin/ai-assistant" element={<RoleGuard requiredRole="admin"><AIAssistant /></RoleGuard>} />
-              <Route path="/admin/documentacao" element={<RoleGuard requiredRole="admin"><Documentacao /></RoleGuard>} />
+              {/* Admin routes - acesso livre sem autenticação */}
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/manual" element={<AdminManual />} />
+              <Route path="/admin/duvidas" element={<AdminDuvidas />} />
+              <Route path="/admin/captura" element={<AdminCaptura />} />
+              <Route path="/admin/producao" element={<AdminProducao />} />
+              <Route path="/admin/sorteios" element={<AdminSorteios />} />
+              <Route path="/admin/historico-sorteios" element={<AdminHistoricoSorteios />} />
+              <Route path="/admin/promocoes" element={<AdminPromocoes />} />
+              <Route path="/admin/atendimento" element={<AdminAtendimento />} />
+              <Route path="/admin/qrcode" element={<AdminQRCode />} />
+              <Route path="/admin/qr" element={<AdminQRCode />} />
+              <Route path="/admin/frentista" element={<AdminFrentista />} />
+              <Route path="/admin/relatorio-frentistas" element={<RelatorioFrentistas />} />
+              <Route path="/admin/relatorio-producao" element={<RelatorioProducao />} />
+              <Route path="/admin/qr-premiacao" element={<QRPremiacao />} />
+              <Route path="/admin/integracoes" element={<AdminIntegracoes />} />
+              <Route path="/admin/pontos-captura" element={<PontosCaptura />} />
+              <Route path="/admin/whatsapp" element={<AdminWhatsApp />} />
+              <Route path="/admin/robo-whatsapp" element={<RoboWhatsapp />} />
+              <Route path="/admin/configuracoes" element={<AdminConfiguracoes />} />
+              <Route path="/admin/livro-caixa" element={<LivroCaixa />} />
+              <Route path="/admin/ai-assistant" element={<AIAssistant />} />
+              <Route path="/admin/documentacao" element={<Documentacao />} />
               
               <Route path="*" element={<NotFound />} />
             </Routes>
