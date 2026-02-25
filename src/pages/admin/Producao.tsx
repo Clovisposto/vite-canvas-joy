@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, DollarSign, Droplets, Clock, AlertTriangle, Play, Award, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import GraficoProducaoDisparos from '@/components/admin/GraficoProducaoDisparos';
 
 export default function AdminProducao() {
   const navigate = useNavigate();
@@ -115,6 +116,8 @@ export default function AdminProducao() {
           <div className="text-center py-12 text-muted-foreground">Carregando...</div>
         ) : (
           <>
+            {/* Gráfico de Produção por Disparo */}
+            <GraficoProducaoDisparos />
             {/* Daily Stats */}
             <div>
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
