@@ -58,12 +58,6 @@ export default function StepUnified({
   };
 
   const validate = () => {
-    // Validar nome (obrigatório)
-    const trimmedName = name.trim();
-    if (!trimmedName || trimmedName.length < 2) {
-      setError('Por favor, informe seu nome.');
-      return false;
-    }
 
     const digits = phone.replace(/\D/g, '');
     
@@ -228,22 +222,6 @@ export default function StepUnified({
 
               {/* Divisor */}
               <div className="border-t border-border/60 mb-6" />
-
-              {/* Campo de nome */}
-              <div className="mb-4">
-                <Label htmlFor="name" className="text-sm font-medium text-foreground flex items-center gap-2 mb-2">
-                  <User className="w-4 h-4 text-primary" />
-                  Seu nome
-                </Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Digite seu nome"
-                  value={name}
-                  onChange={(e) => onNameChange(e.target.value)}
-                  className="h-12 text-base border-2 border-border focus:border-primary transition-colors"
-                />
-              </div>
 
               {/* Campo de telefone */}
               <div className="mb-5">

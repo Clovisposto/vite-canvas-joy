@@ -1,6 +1,5 @@
 import { ReactNode, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
@@ -75,13 +74,12 @@ const menuItems: MenuItem[] = [
 ];
 
 export default function AdminLayout({ children, title }: AdminLayoutProps) {
-  const { user, profile, roles, signOut, canAccessRoute } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { toast } = useToast();
 
-  // Filter menu items based on user role
-  const filteredMenuItems = menuItems.filter(item => canAccessRoute(item.requiredRole));
+  // Show all menu items (no role filtering)
+  const filteredMenuItems = menuItems;
 
   // Listen for negative ratings in real-time
   useEffect(() => {
@@ -192,32 +190,17 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
             </nav>
           </ScrollArea>
 
-          {/* User info */}
+          {/* Footer */}
           <div className="p-4 border-t border-sidebar-border">
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
-                <span className="text-sm font-medium text-sidebar-accent-foreground">
-                  {profile?.full_name?.charAt(0) || user?.email?.charAt(0) || '?'}
-                </span>
+                <span className="text-sm font-medium text-sidebar-accent-foreground">P</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">
-                  {profile?.full_name || user?.email}
-                </p>
-                <p className="text-xs text-sidebar-foreground/60 capitalize">
-                  {roles?.[0] || 'viewer'}
-                </p>
+                <p className="text-sm font-medium text-sidebar-foreground truncate">Posto 7</p>
+                <p className="text-xs text-sidebar-foreground/60">Admin</p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground"
-              onClick={signOut}
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Sair
-            </Button>
           </div>
         </div>
       </aside>
